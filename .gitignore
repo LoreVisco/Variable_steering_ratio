@@ -1,0 +1,10 @@
+
+# Folders
+Output/
+__pycache__/
+
+# Files
+*.STEP
+
+# caches
+*.pyc
