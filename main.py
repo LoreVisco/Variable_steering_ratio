@@ -15,22 +15,69 @@ from scipy import interpolate
 
 #endregion
 #region#################################################################################### Functions definition       
+
+def delta_2_joint(delta_1,beta,alpha):
+    
+    """
+    DIRECT FUNCTION OF THE UNIVERSAL JOINT
+    
+    computes the angle of the output shaft delta_2 for a given configuration of the an universal joint, defined by the input shaft angle delta_1, the joint angle alpha and the phase angle beta. 
+    
+    ════════════════════════════════
+    
+    In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
+    To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
+    Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
+    beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
+    The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
+    the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
+    
+    ════════════════════════════════
+    
+    Args:
+        delta_1 (float): input shaft angle in degrees
+        beta (float): phase angle in degrees in the range (-90,90]
+        alpha (float): joint angle in degrees in the range [0,90)
+
+    Returns:
+        float: output shaft angle in degrees
+    """
+
+    d = delta_1*np.pi/180
+    b = beta*np.pi/180
+    a = alpha*np.pi/180
+
+    correction = np.pi*np.ceil((d-np.pi/2+b)/np.pi)
+    
+    delta_2 = np.arctan2(np.tan(d+b),np.cos(a))-np.arctan2(np.tan(b),np.cos(a))+correction
+    
+    return delta_2*180/np.pi
+
 def delta_1_joint(delta_2,beta,alpha):
     
     """
+    INVERSE FUNCTION OF THE UNIVERSAL JOINT
+    
+    computes the angle of the input shaft delta_1 for a given configuration of the an universal joint, defined by the output shaft angle delta_2, the joint angle alpha and the phase angle beta. 
+    
+    ════════════════════════════════
+    
     In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
     To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
-    alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
-    TODO:  finish docstring
+    Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
+    beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
+    The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
+    the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
     
-    ▬▬▬▬▬▬▬▬▬▬▬
+    ════════════════════════════════
+    
     Args:
-        delta_2 (_type_): _description_
-        beta (_type_): _description_
-        alpha (_type_): _description_
+        delta_2 (float): output shaft angle in degrees
+        beta (float): phase angle in degrees in the range (-90,90]
+        alpha (float): joint angle in degrees in the range [0,90)
 
     Returns:
-        _type_: _description_
+        float: input shaft angle in degrees
     """
     
     # theta is the angular position of the input shaft
@@ -49,44 +96,28 @@ def delta_1_joint(delta_2,beta,alpha):
 
     return delta_1*180/np.pi
 
-def deriv(A,B):
-    """_summary_
+def deriv(y,x):
+    """
+    DERIVATIVE FUNCTION OF Y WITH RESPECT TO X
+    
+    It computes the numeric derivative of y with respect to x.
+    The function takes two array x and y and performs the numerical derivative using the forward difference, the last value is linearly extrapolated from the previous values. It doesn't need x and y to be of the same length, the length of the output will be equal to the length of the shortest.
 
+    ════════════════════════════════
+    
     Args:
-        A (_type_): _description_
-        B (_type_): _description_
+        y (float): array that defines the function of which to compute the derivative
+        x (float): array that defines the variable against which to compute the derivative
 
     Returns:
-        _type_: _description_
+        float: array of the same length of the shortest between x and y representing dy/dx
     """
-    length = min([len(A),len(B)])
-    C = np.empty(length)
+    length = min([len(y),len(x)])
+    dy = np.empty(length)
     for i in range(length-1):
-        C[i] = (A[i+1]-A[i])/(B[i+1]-B[i])
-    C[i+1] = C[i]+(B[i+1]-B[i])*(C[i]-C[i-1])/(B[i]-B[i-1])
-    return C
-
-def delta_2_joint(delta_1,beta,alpha):
-    """_summary_
-
-    Args:
-        delta_1 (_type_): _description_
-        beta (_type_): _description_
-        alpha (_type_): _description_
-
-    Returns:
-        _type_: _description_
-    """
-
-    d = delta_1*np.pi/180
-    b = beta*np.pi/180
-    a = alpha*np.pi/180
-
-    correction = np.pi*np.ceil((d-np.pi/2+b)/np.pi)
-    
-    delta_2 = np.arctan2(np.tan(d+b),np.cos(a))-np.arctan2(np.tan(b),np.cos(a))+correction
-    
-    return delta_2*180/np.pi
+        dy[i] = (y[i+1]-y[i])/(x[i+1]-x[i])
+    dy[i+1] = dy[i]+(x[i+1]-x[i])*(dy[i]-dy[i-1])/(x[i]-x[i-1])
+    return dy
 
 def variable_ratio_fun(delta,initial_ratio,Delta,delta_transition):
     """_summary_
@@ -125,7 +156,7 @@ def variable_ratio_inverse(displacement,initial_ratio,Delta,delta_transition):
         err = abs((delta-delta_old)/delta)
     return delta
 
-def smoothing(curve):
+def smoothing(curve,allowed_err):
     """_summary_
 
     Args:
@@ -146,7 +177,8 @@ def smoothing(curve):
             
     N = len(x)
     
-    allowed_err = 0.005
+    ################## tooth subdivision
+    
     y_max = max(y)
     y_max_ind = y.index(y_max)
     
@@ -181,10 +213,13 @@ def smoothing(curve):
     fillet_x = x[start_fillet:end_fillet+1]
     fillet_y = y[start_fillet:end_fillet+1]
     
+    ################## fillet smoothing
+    
     i = 0
     N_fillet = len(fillet_x)
     smooth_fillet_x  = [fillet_x[0]]
     smooth_fillet_y = [fillet_y[0]]
+    # In the following cycle the point i+j is checked to be good or bad by taking the line between point i and i+j and checking if there are following points on the left of the line (left is taken sitting on i and looking at i+j). This should ensure that the line is a tangent line for the fillet.
     while i<N_fillet-1:
         j = 1
         pts_on_left = 1
@@ -199,7 +234,7 @@ def smoothing(curve):
             else:
                 last_i = N_fillet-1
             
-            for k in range(i+j+1,last_i):#chain(range(first_i,i),
+            for k in range(i+j+1,last_i):
                 check = fillet_y[k]-y1>(fillet_x[k]-x1)*m
                 if check:
                     pts_on_left += 1
@@ -211,22 +246,25 @@ def smoothing(curve):
 
     smooth_curve_x = np.append(np.append(left_flank[0],smooth_fillet_x),right_flank[0])
     smooth_curve_y = np.append(np.append(left_flank[1],smooth_fillet_y),right_flank[1])
-    
+
     N = len(smooth_curve_x)
     
+    ################## curve interpolation
     lengths = [0]
     for i in range(1,N):
         distance_i = np.linalg.norm([smooth_curve_x[i]-smooth_curve_x[i-1],smooth_curve_y[i]-smooth_curve_y[i-1]])
         lengths.append(lengths[i-1]+distance_i)
     
-    lenght_LUT = interpolate.interp1d(lengths,smooth_curve_x)
+    # the following line creates a function that give the x for a given distance traveled on the curve
+    length_LUT = interpolate.interp1d(lengths,smooth_curve_x)
     
     max_err = allowed_err+1
-    number_of_points = 10
+    number_of_points = 8
     points_l = np.linspace(lengths[0],lengths[-1],number_of_points,endpoint=True)
-    points_x = lenght_LUT(points_l[1:-1])
-    points_x = np.append(np.full(4,smooth_curve_x[0]),points_x)
-    points_x = np.append(points_x,np.full(4,smooth_curve_x[-1]))
+    # the first and last knot of a B-spline have to have multiplicity k+1 where k is the spline order
+    points_l = np.append(np.full(3,points_l[0]),points_l)
+    points_l = np.append(points_l,np.full(3,points_l[-1]))
+    points_x = length_LUT(points_l)
     weights = np.ones(N)
     while max_err>allowed_err:
         
@@ -244,15 +282,14 @@ def smoothing(curve):
             weights[idx_max_err+1] += .5
             weights[idx_max_err-1] += .5
             
-        #TODO: avoid to add points too close to existing ones, one way to do it would be instead of adding the point where there is the maximum error, adding it halfway between existing points close to the maximum error point
         x_to_add = smooth_curve_x[idx_max_err]
         if x_to_add not in points_x:
             idx_sort = np.searchsorted(points_x,x_to_add)
             points_x = np.insert(points_x,idx_sort,x_to_add)
-        points_y = interp(points_x)
-    
+
+    # removal of the multiplicity of the fist and last knot
     points_x = points_x[3:-3]
-    points_y = points_y[3:-3]
+    points_y = interp(points_x)
     
     x_first = points_x[0]
     y_first = interp(x_first)
@@ -267,14 +304,13 @@ def smoothing(curve):
         m = 1/interpolate.splev(x_last,interp.tck,der=1,ext=0)
         x_last = x_last - y_last*m
         y_last = interp(x_last)
-        
     
     points_x[0] = x_first
     points_x[-1] = x_last
     points_y[0] = 0
     points_y[-1] = 0
     
-    return [points_x, points_y]#, [approximate_x, approximate_y]
+    return [points_x, points_y]
 
 def rack_cut(cut_input):
     """_summary_
@@ -320,6 +356,7 @@ if __name__ == '__main__':
     delta_trans = float(config['config']['delta_trans'])
     deg_step = float(config['config']['deg_step'])
     height_discretizations = int(config['config']['height_discretizations'])
+    max_err = float(config['config']['max_err'])
     output_filename = config['config']['output_filename']
     pinion_filename = config['config']['pinion_filename']
     show_plots = bool(config['config']['show_plots'])
@@ -384,7 +421,7 @@ if __name__ == '__main__':
         pinion_ax = fig.add_subplot()
         pinion_ax.axis('equal')
         pinion_x, pinion_y = pinion.exterior.xy
-        plt.plot(pinion_x,pinion_y)
+        plt.plot(pinion_x,pinion_y,'.')
         plt.show()
 
     # Initialization of the two arrays output of the following for cycle
@@ -458,18 +495,18 @@ if __name__ == '__main__':
 
     print("Smoothing the curves...")
     knots_slices = []
-    # num_proc = min([len(slices[0]),cpu_count(),8])
-    # with Pool(num_proc) as pool:
-    #     for slice in tqdm.tqdm(slices):
-    #         knots_slice = pool.map(smoothing,slice)
-    #         knots_slices.append(knots_slice)
+    num_proc = min([len(slices[0]),cpu_count(),8])
+    with Pool(num_proc) as pool:
+        for slice in tqdm.tqdm(slices):
+            knots_slice = pool.map(smoothing,slice)
+            knots_slices.append(knots_slice)
             
     #Use the following to develop the function smoothing
-    for slice in tqdm.tqdm(slices):
-        knots_slice = []
-        for curve in slice:
-            knots_slice.append(smoothing(curve))
-        knots_slices.append(knots_slice)
+    # for slice in tqdm.tqdm(slices):
+    #     knots_slice = []
+    #     for curve in slice:
+    #         knots_slice.append(smoothing(curve,max_err))
+    #     knots_slices.append(knots_slice)
 
 #endregion
 #region#################################################################################### Plots                      
