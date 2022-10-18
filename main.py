@@ -1,6 +1,5 @@
 #region#################################################################################### Header                     
 
-from bisect import insort
 import sys
 import configparser as cp
 from multiprocessing import Pool, cpu_count
@@ -17,6 +16,23 @@ from scipy import interpolate
 #endregion
 #region#################################################################################### Functions definition       
 def delta_1_joint(delta_2,beta,alpha):
+    
+    """
+    In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
+    To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
+    alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
+    TODO:  finish docstring
+    
+    ▬▬▬▬▬▬▬▬▬▬▬
+    Args:
+        delta_2 (_type_): _description_
+        beta (_type_): _description_
+        alpha (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     # theta is the angular position of the input shaft
     # beta is the phase angle of the joint, when theta is equal to zero beta is the angle between the hinge axis of the first shaft and the shafts plane, it is usually set to 0 or 90 deg
     # alpha is the joint angle, in other words it is the acute angle between the first and second shaft's axis 
@@ -34,6 +50,15 @@ def delta_1_joint(delta_2,beta,alpha):
     return delta_1*180/np.pi
 
 def deriv(A,B):
+    """_summary_
+
+    Args:
+        A (_type_): _description_
+        B (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
     length = min([len(A),len(B)])
     C = np.empty(length)
     for i in range(length-1):
@@ -41,8 +66,17 @@ def deriv(A,B):
     C[i+1] = C[i]+(B[i+1]-B[i])*(C[i]-C[i-1])/(B[i]-B[i-1])
     return C
 
-# This function define the angular position of the second shaft as function of angular position of the first shaft, the phase angle of the joint and the inclination angle
 def delta_2_joint(delta_1,beta,alpha):
+    """_summary_
+
+    Args:
+        delta_1 (_type_): _description_
+        beta (_type_): _description_
+        alpha (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
 
     d = delta_1*np.pi/180
     b = beta*np.pi/180
@@ -55,10 +89,34 @@ def delta_2_joint(delta_1,beta,alpha):
     return delta_2*180/np.pi
 
 def variable_ratio_fun(delta,initial_ratio,Delta,delta_transition):
+    """_summary_
+
+    Args:
+        delta (_type_): _description_
+        initial_ratio (_type_): _description_
+        Delta (_type_): _description_
+        delta_transition (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     displacement = (initial_ratio+Delta)*delta - Delta*delta_transition/2*np.sqrt(np.pi/3)*math.erf(delta/delta_transition*np.sqrt(3))
     return displacement
 
 def variable_ratio_inverse(displacement,initial_ratio,Delta,delta_transition):
+    """_summary_
+
+    Args:
+        displacement (_type_): _description_
+        initial_ratio (_type_): _description_
+        Delta (_type_): _description_
+        delta_transition (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     delta = displacement/(initial_ratio+Delta)
     err = 1
     while abs(err)>1e-8:
@@ -67,36 +125,16 @@ def variable_ratio_inverse(displacement,initial_ratio,Delta,delta_transition):
         err = abs((delta-delta_old)/delta)
     return delta
 
-def erase_next(x,y,i,start):
-
-    alpha_1 = np.arctan2((y[i-1]-y[i-2]),(x[i-1]-x[i-2]))*180/np.pi
-    alpha = np.arctan2((y[i]-y[i-1]),(x[i]-x[i-1]))*180/np.pi
-    beta_1 = np.arctan2((y[i+1]-y[i]),(x[i+1]-x[i]))*180/np.pi
-    beta_2 = np.arctan2((y[i+2]-y[i]),(x[i+2]-x[i]))*180/np.pi
-    distance = np.linalg.norm([x[i+1]-x[i],y[i+1]-y[i]])
-    d_min = 0.075
-    d_max = 0.2
-    max_diff = 1#+abs(alpha-alpha_1)/10
-    Fillet_min_diff = 1
-
-    if distance<d_min:
-        return True
-    if i>start+1:
-        if abs((alpha-alpha_1)-(beta_1-alpha))<max_diff:
-            return False
-        elif (beta_1-alpha)<0:
-            if (beta_2-alpha)-(beta_1-alpha)>Fillet_min_diff:
-                return True
-            else:
-                return False
-        elif distance>d_max:
-            return False
-        elif beta_1-alpha>=0:
-            return False
-    else:
-        return False
-
 def smoothing(curve):
+    """_summary_
+
+    Args:
+        curve (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     N = len(curve[0])
     x = [curve[0][0]]
     y = [curve[1][0]]
@@ -205,7 +243,8 @@ def smoothing(curve):
         if idx_max_err > 0 | idx_max_err<N-1:
             weights[idx_max_err+1] += .5
             weights[idx_max_err-1] += .5
-    
+            
+        #TODO: avoid to add points too close to existing ones, one way to do it would be instead of adding the point where there is the maximum error, adding it halfway between existing points close to the maximum error point
         x_to_add = smooth_curve_x[idx_max_err]
         if x_to_add not in points_x:
             idx_sort = np.searchsorted(points_x,x_to_add)
@@ -238,6 +277,15 @@ def smoothing(curve):
     return [points_x, points_y]#, [approximate_x, approximate_y]
 
 def rack_cut(cut_input):
+    """_summary_
+
+    Args:
+        cut_input (_type_): _description_
+
+    Returns:
+        _type_: _description_
+    """
+    
     rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance = cut_input
     
     for i in range(len(delta_pinion)):
@@ -274,6 +322,7 @@ if __name__ == '__main__':
     height_discretizations = int(config['config']['height_discretizations'])
     output_filename = config['config']['output_filename']
     pinion_filename = config['config']['pinion_filename']
+    show_plots = bool(config['config']['show_plots'])
 
 #endregion
 #region#################################################################################### Read pinion input file     
@@ -330,13 +379,13 @@ if __name__ == '__main__':
     pinion = Polygon(pinion_points)
     pinion = affinity.rotate(pinion,initial_rotation,origin=(0,0),use_radians=True)
 
-    #### Uncomment the following to check on pinion geometry
-    # fig = plt.figure()
-    # pinion_ax = fig.add_subplot()
-    # pinion_ax.axis('equal')
-    # pinion_x, pinion_y = pinion.exterior.xy
-    # plt.plot(pinion_x,pinion_y)
-    # plt.show()
+    if show_plots:
+        fig = plt.figure()
+        pinion_ax = fig.add_subplot()
+        pinion_ax.axis('equal')
+        pinion_x, pinion_y = pinion.exterior.xy
+        plt.plot(pinion_x,pinion_y)
+        plt.show()
 
     # Initialization of the two arrays output of the following for cycle
     slices = []
@@ -426,41 +475,40 @@ if __name__ == '__main__':
 #region#################################################################################### Plots                      
     # Inizialization of the figures used check the result and to debug the code
 
-    fig = plt.figure()
-    ax_3D = fig.add_subplot(projection='3d')
-    ax_3D.axis('equal')
-    fig = plt.figure()
-    ax_2D = fig.add_subplot()
-    ax_2D.axis('equal')
-    fig = plt.figure()
-    ax_fun = fig.add_subplot()
-    ax_fun.axis()
-    
-    slice_to_check = height_discretizations-3 #np.ceil(height_discretizations/2)
+    if show_plots:
+        fig = plt.figure()
+        ax_3D = fig.add_subplot(projection='3d')
+        ax_3D.axis('equal')
+        fig = plt.figure()
+        ax_2D = fig.add_subplot()
+        ax_2D.axis('equal')
+        fig = plt.figure()
+        ax_fun = fig.add_subplot()        
+        slice_to_check = 0 #np.ceil(height_discretizations/2)
 
-    delta_wheel_ratio = [1/d for d in deriv(delta_wheel,rack_disp)]
-    delta_pinion_ratio = [1/d for d in deriv(delta_pinion,rack_disp)]
-    ax_fun.plot(rack_disp,delta_wheel_ratio)
-    ax_fun.plot(rack_disp,delta_pinion_ratio)
+        delta_wheel_ratio = [1/d for d in deriv(delta_wheel,rack_disp)]
+        delta_pinion_ratio = [1/d for d in deriv(delta_pinion,rack_disp)]
+        ax_fun.plot(rack_disp,delta_wheel_ratio)
+        ax_fun.plot(rack_disp,delta_pinion_ratio)
 
-    
-    for i in range(height_discretizations):
+        
+        for i in range(height_discretizations):
 
-        for j in range(len(knots_slices[i])):
+            for j in range(len(knots_slices[i])):
 
-            ax_3D.plot(knots_slices[i][j][0],knots_slices[i][j][1],plane_height[i],'b')
+                ax_3D.plot(knots_slices[i][j][0],knots_slices[i][j][1],plane_height[i],'b')
 
-            if i == slice_to_check:
+                if i == slice_to_check:
 
-                ax_2D.plot(slices[i][j][0],slices[i][j][1],'.r')
-                final_spline = interpolate.make_interp_spline(knots_slices[i][j][0],knots_slices[i][j][1],bc_type='natural')
-                final_spline_x = np.linspace(final_spline.t[0],final_spline.t[-1],1000,endpoint=True)
-                final_spline_y = final_spline(final_spline_x)
-                ax_2D.plot(final_spline_x,final_spline_y,'b')
-                ax_2D.plot(knots_slices[i][j][0],knots_slices[i][j][1],'og')
+                    ax_2D.plot(slices[i][j][0],slices[i][j][1],'.r')
+                    final_spline = interpolate.make_interp_spline(knots_slices[i][j][0],knots_slices[i][j][1],bc_type='natural')
+                    final_spline_x = np.linspace(final_spline.t[0],final_spline.t[-1],1000,endpoint=True)
+                    final_spline_y = final_spline(final_spline_x)
+                    ax_2D.plot(final_spline_x,final_spline_y,'b')
+                    ax_2D.plot(knots_slices[i][j][0],knots_slices[i][j][1],'og')
 
-    ax_2D.grid(True)
-    plt.show()
+        ax_2D.grid(True)
+        plt.show()
 #endregion
 #region#################################################################################### Spline/STEP file creation  
 
