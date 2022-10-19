@@ -189,14 +189,18 @@ def smoothing(input):
     """
     curve, allowed_err = input
     N = len(curve[0])
-    x = [curve[0][0]]
-    y = [curve[1][0]]
+    x = []
+    y = []
     
-    for i in range(1,N):
-        if curve[0][i-1]<curve[0][i]:
-            x.append(curve[0][i])
-            y.append(curve[1][i])
-            
+    i = 0
+    while i < N-1:
+        x.append(curve[0][i])
+        y.append(curve[1][i])
+        j = 1
+        while curve[0][i+j]<=curve[0][i]:
+            j+=1
+        i += j
+                
     N = len(x)
     
     ################## tooth subdivision
@@ -439,6 +443,16 @@ if __name__ == '__main__':
 
     # This is the vector of the heights of the planes on wich we want to find the profile of the teeth, the number of planes will affect the accuracy of the result
     plane_height = np.linspace(-rack_height/2, rack_height/2, height_discretizations, endpoint=True)
+    
+    if show_plots:
+        fig = plt.figure()
+        ax_fun = fig.add_subplot()
+        
+        delta_wheel_ratio = [1/d for d in deriv(delta_wheel,rack_disp)]
+        delta_pinion_ratio = [1/d for d in deriv(delta_pinion,rack_disp)]
+        ax_fun.plot(rack_disp,delta_wheel_ratio)
+        ax_fun.plot(rack_disp,delta_pinion_ratio)
+
 #endregion
 #region#################################################################################### Slicing                    
     # I create the two polygons, the pinion from the imported points and the rack to be cut is just a rectangle 
@@ -472,6 +486,15 @@ if __name__ == '__main__':
     num_proc = min([height_discretizations,cpu_count(),8])
     with Pool(num_proc) as pool:
         rack_polygon = list(tqdm.tqdm(pool.imap(rack_cut,cut_input),total=height_discretizations))
+    
+    if show_plots:
+        fig = plt.figure()
+        ax_3D = fig.add_subplot(projection='3d')
+        ax_3D.axis('equal')
+        for k, slice in enumerate(rack_polygon):
+            x, y = slice.exterior.xy
+            ax_3D.plot(x,y,plane_height[k])
+        plt.show()
     
     for j, height in enumerate(plane_height):
         
@@ -537,13 +560,15 @@ if __name__ == '__main__':
     # for slice in tqdm.tqdm(slices):
     #     knots_slice = []
     #     for curve in slice:
-    #         knots_slice.append(smoothing(curve,max_err))
+    #         knots_slice.append(smoothing([curve,max_err]))
     #     knots_slices.append(knots_slice)
 
 #endregion
 #region#################################################################################### Plots                      
     # Inizialization of the figures used check the result and to debug the code
-
+    
+    slice_to_check = 0 #np.ceil(height_discretizations/2)
+    
     if show_plots:
         fig = plt.figure()
         ax_3D = fig.add_subplot(projection='3d')
@@ -551,15 +576,6 @@ if __name__ == '__main__':
         fig = plt.figure()
         ax_2D = fig.add_subplot()
         ax_2D.axis('equal')
-        fig = plt.figure()
-        ax_fun = fig.add_subplot()        
-        slice_to_check = 0 #np.ceil(height_discretizations/2)
-
-        delta_wheel_ratio = [1/d for d in deriv(delta_wheel,rack_disp)]
-        delta_pinion_ratio = [1/d for d in deriv(delta_pinion,rack_disp)]
-        ax_fun.plot(rack_disp,delta_wheel_ratio)
-        ax_fun.plot(rack_disp,delta_pinion_ratio)
-
         
         for i in range(height_discretizations):
 
