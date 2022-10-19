@@ -35,12 +35,12 @@ def delta_2_joint(delta_1,beta,alpha):
     ════════════════════════════════
     
     Args:
-        delta_1 (float): input shaft angle in degrees
-        beta (float): phase angle in degrees in the range (-90,90]
-        alpha (float): joint angle in degrees in the range [0,90)
+        delta_1 (float): input shaft angle in [deg]
+        beta (float): phase angle in [deg] in the range (-90,90]
+        alpha (float): joint angle in [deg] in the range [0,90)
 
     Returns:
-        float: output shaft angle in degrees
+        float: output shaft angle in [deg]
     """
 
     d = delta_1*np.pi/180
@@ -72,12 +72,12 @@ def delta_1_joint(delta_2,beta,alpha):
     ════════════════════════════════
     
     Args:
-        delta_2 (float): output shaft angle in degrees
-        beta (float): phase angle in degrees in the range (-90,90]
-        alpha (float): joint angle in degrees in the range [0,90)
+        delta_2 (float): output shaft angle in [deg]
+        beta (float): phase angle in [deg] in the range (-90,90]
+        alpha (float): joint angle in [deg] in the range [0,90)
 
     Returns:
-        float: input shaft angle in degrees
+        float: input shaft angle in [deg]
     """
     
     # theta is the angular position of the input shaft
@@ -119,53 +119,75 @@ def deriv(y,x):
     dy[i+1] = dy[i]+(x[i+1]-x[i])*(dy[i]-dy[i-1])/(x[i]-x[i-1])
     return dy
 
-def variable_ratio_fun(delta,initial_ratio,Delta,delta_transition):
-    """_summary_
-
+def variable_ratio_fun(delta,initial_ratio,Delta_ratio,delta_transition):
+    """
+    DIRECT FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
+    
+    This function computes the rack displacement for a given steering angle and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
+    
+    ════════════════════════════════
+    
+    The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the position, the intergral function have been found. The function computes the displacement of the rack as a function of steering angle for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
+    
+    ════════════════════════════════
+    
     Args:
-        delta (_type_): _description_
-        initial_ratio (_type_): _description_
-        Delta (_type_): _description_
-        delta_transition (_type_): _description_
+        delta (float): input steering angle in [deg]
+        initial_ratio (float): steering ratio in [mm/deg] at delta=0
+        Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
+        delta_transition (float): steering angle in [deg] at which the final steering is reached
 
     Returns:
-        _type_: _description_
+        float: steering rack displacemente
     """
     
-    displacement = (initial_ratio+Delta)*delta - Delta*delta_transition/2*np.sqrt(np.pi/3)*math.erf(delta/delta_transition*np.sqrt(3))
+    displacement = (initial_ratio+Delta_ratio)*delta - Delta_ratio*delta_transition/2*np.sqrt(np.pi/3)*math.erf(delta/delta_transition*np.sqrt(3))
     return displacement
 
-def variable_ratio_inverse(displacement,initial_ratio,Delta,delta_transition):
-    """_summary_
+def variable_ratio_inverse(displacement,initial_ratio,Delta_ratio,delta_transition):
+    """
+    INVERSE FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
+    
+    This function computes the steering angle for a given rack displacement and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
+    
+    ════════════════════════════════
+    
+    The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the steering angle, the intergral function have been found and then numerically inverted. The function computes the steering angle as a function of rack displacement for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
+    
+    ════════════════════════════════
 
     Args:
-        displacement (_type_): _description_
-        initial_ratio (_type_): _description_
-        Delta (_type_): _description_
-        delta_transition (_type_): _description_
+        displacement (float): steering rack displacement in [mm]
+        initial_ratio (float): steering ratio in [mm/deg] at delta=0
+        Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
+        delta_transition (float): steering angle in [deg] at which the final steering is reached
+
 
     Returns:
-        _type_: _description_
+        float: steering angle in [deg]
     """
     
-    delta = displacement/(initial_ratio+Delta)
+    delta = displacement/(initial_ratio+Delta_ratio)
     err = 1
-    while abs(err)>1e-8:
+    while abs(err)>1e-10:
         delta_old = delta
-        delta = (displacement + Delta*delta_transition/2*np.sqrt(np.pi/3)*math.erf(np.sqrt(3)*delta_old/delta_transition))/(initial_ratio + Delta)
+        delta = (displacement + Delta_ratio*delta_transition/2*np.sqrt(np.pi/3)*math.erf(np.sqrt(3)*delta_old/delta_transition))/(initial_ratio + Delta_ratio)
         err = abs((delta-delta_old)/delta)
     return delta
 
-def smoothing(curve,allowed_err):
-    """_summary_
+def smoothing(input):
+    """
+    This function is prepared for parallel computing. It takes as input an array with x and y coordinates of the tooth curve to be smoothen out and, first finds the fillet, delete the unwanted points, and then it creates an interpolating spline that approximate the input curve with the maximum error defined in the input. It gives the set of points of the interpolating spline.
+    
+    ════════════════════════════════
 
     Args:
-        curve (_type_): _description_
+        input (float): [curve, max_allowed_error] the variable "curve" is an array of floats with x and y coordinates of each point: curve = [[x],[y]], x and y have to be of the same shape. max_allowed_error is the maximum error in y direction between the computed spline and the original points of the input curve in [mm].
 
     Returns:
-        _type_: _description_
+        float: An array of points of the kind [[x],[y]] with the coorinates of the points needed to create the interpolating spline
     """
-    
+    curve, allowed_err = input
     N = len(curve[0])
     x = [curve[0][0]]
     y = [curve[1][0]]
@@ -312,17 +334,24 @@ def smoothing(curve,allowed_err):
     
     return [points_x, points_y]
 
-def rack_cut(cut_input):
-    """_summary_
+def rack_cut(input):
+    """
+    This function is prepared for parallel computing. It creates a polygon representing a single slice of the steering rack by means of a series of boolean operations using the pinion cutter polygon.
 
     Args:
-        cut_input (_type_): _description_
+        input (any): it is an array of the kind: [rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance] where:
+            rack: is the blank polygon of the rack to be cut
+            pinion: is the polygon representing se section of the cutter pinion
+            section_rotation: the angle in [deg] of fixed rotation to address the helicity of the pinion
+            delta_pinion: an array of all the angular position of the pinion in [deg]
+            rack_disp: an array of all the displacements in [mm] of the rack for each angular position of the pinion
+            axis_distance: the distance between the axis of the pinion and the rack surface in [mm]
 
     Returns:
-        _type_: _description_
+        polygon: polygon representing the single slice of the steering rack
     """
     
-    rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance = cut_input
+    rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance = input
     
     for i in range(len(delta_pinion)):
         theta = delta_pinion[i]*np.pi/180 - section_rotation
@@ -498,7 +527,10 @@ if __name__ == '__main__':
     num_proc = min([len(slices[0]),cpu_count(),8])
     with Pool(num_proc) as pool:
         for slice in tqdm.tqdm(slices):
-            knots_slice = pool.map(smoothing,slice)
+            input = []
+            for curve in slice:
+                input.append([curve,max_err])
+            knots_slice = pool.map(smoothing,input)
             knots_slices.append(knots_slice)
             
     #Use the following to develop the function smoothing
