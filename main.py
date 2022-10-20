@@ -367,6 +367,7 @@ def rack_cut(input):
 if __name__ == '__main__':
 #endregion
 #region#################################################################################### Read configuration file    
+
     if len(sys.argv) < 2:
         cfg_file = 'Input\\defaultcfg2D.cfg'
     else:
@@ -396,6 +397,7 @@ if __name__ == '__main__':
 
 #endregion
 #region#################################################################################### Read pinion input file     
+
     # Import of the pinion section from a .xyz file, each line of this file contain the coordinates of the points of the boundary of the section
     pinion_points = []
     with open(f'Input\\{pinion_filename}') as pinion_file:
@@ -404,6 +406,7 @@ if __name__ == '__main__':
         for line in lines:
             x, y = line.strip().split(',')
             pinion_points.append([float(x),float(y)])
+            
 #endregion
 #region#################################################################################### Constants definition       
 
@@ -429,19 +432,16 @@ if __name__ == '__main__':
 
 #endregion
 #region#################################################################################### Arrays definition          
-    # Steering wheel angles array in [deg], this influences the resolution of the movement and the run-time 
+
     delta_pinion = np.arange(-delta_pinion_overtravel,ext_angle+delta_pinion_overtravel,deg_step)
 
-    # Number of discretizations of the movement
     N = len(delta_pinion)
 
     delta_wheel = [delta_1_joint(d,beta,alpha) for d in delta_pinion]
     # delta_pinion = delta_wheel # Activate this line if you want to deactivate cardanic joint correction
 
-    # Definition of the rack displacement array with constant transmission ratio as function of steering wheel angle
     rack_disp = [variable_ratio_fun(d,rack_ratio,Delta_ratio,delta_trans) for d in delta_wheel]
 
-    # This is the vector of the heights of the planes on wich we want to find the profile of the teeth, the number of planes will affect the accuracy of the result
     plane_height = np.linspace(-rack_height/2, rack_height/2, height_discretizations, endpoint=True)
     
     if show_plots:
@@ -454,8 +454,8 @@ if __name__ == '__main__':
         ax_fun.plot(rack_disp,delta_pinion_ratio)
 
 #endregion
-#region#################################################################################### Slicing                    
-    # I create the two polygons, the pinion from the imported points and the rack to be cut is just a rectangle 
+#region#################################################################################### Slicing    
+         
     pinion = Polygon(pinion_points)
     pinion = affinity.rotate(pinion,initial_rotation,origin=(0,0),use_radians=True)
 
@@ -466,15 +466,9 @@ if __name__ == '__main__':
         pinion_x, pinion_y = pinion.exterior.xy
         plt.plot(pinion_x,pinion_y,'.')
         plt.show()
-
-    # Initialization of the two arrays output of the following for cycle
+        
     slices = []
 
-    # In this for cycles through the different slices of the rack, first the rack profile is computed using the boolean operations,
-    # in order to address the helixicity of the teeth for each slice the pinion section is rotated accordingly, after the realization of the polygon
-    # representing the slice of the rack, the points are extracted, the four points on the edges of the rack are eliminated.
-    # Then, the array is ordered, the fillet on each tooth is smoothed out and the array is divided into curves.
-    
     rack_blank = Polygon([[-l_left,0],[l_right,0],[l_right,rack_thickness],[-l_left,rack_thickness]])
     
     cut_input = []
@@ -542,6 +536,7 @@ if __name__ == '__main__':
             slice.append([rack_x[start:end+1],rack_y[start:end+1]])
             i +=2
         slices.append(slice)
+        
 #endregion
 #region#################################################################################### Smoothing                  
 
@@ -594,6 +589,7 @@ if __name__ == '__main__':
 
         ax_2D.grid(True)
         plt.show()
+        
 #endregion
 #region#################################################################################### Spline/STEP file creation  
 
