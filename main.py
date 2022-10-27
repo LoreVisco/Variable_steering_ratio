@@ -3,6 +3,7 @@
 import sys
 import configparser as cp
 from multiprocessing import Pool, cpu_count
+from time import time
 import cadquery as cq
 import numpy as np
 from matplotlib import pyplot as plt
@@ -12,6 +13,7 @@ import math
 import tqdm
 from datetime import datetime
 from scipy import interpolate
+from steputils import p21
 
 #endregion
 #region#################################################################################### Functions definition       
@@ -288,6 +290,7 @@ def smoothing(input):
     number_of_points = 8
     points_l = np.linspace(lengths[0],lengths[-1],number_of_points,endpoint=True)
     # the first and last knot of a B-spline have to have multiplicity k+1 where k is the spline order
+    points_x = []
     points_l = np.append(np.full(3,points_l[0]),points_l)
     points_l = np.append(points_l,np.full(3,points_l[-1]))
     points_x = length_LUT(points_l)
@@ -326,17 +329,26 @@ def smoothing(input):
         
     x_last = points_x[-1]
     y_last = interp(x_last)
-    while y_last>1e-10:
+    while y_last>1e-8:
         m = 1/interpolate.splev(x_last,interp.tck,der=1,ext=0)
         x_last = x_last - y_last*m
         y_last = interp(x_last)
     
-    points_x[0] = x_first
-    points_x[-1] = x_last
+    if x_last>points_x[-2]:
+        points_x[-1] = x_last
+    
+    if x_first<points_x[1]:
+        points_x[0] = x_first
+    
     points_y[0] = 0
     points_y[-1] = 0
     
-    return [points_x, points_y]
+    final_spline = interpolate.make_interp_spline(points_x,points_y)
+    control_points_y = final_spline.c
+    control_points_x = [sum(final_spline.t[list(range(i+1,i+4))])/3 for i in range(len(final_spline.t)-4)]
+    knots = final_spline.t
+    
+    return [points_x, points_y, control_points_x, control_points_y, knots]
 
 def rack_cut(input):
     """
@@ -364,6 +376,98 @@ def rack_cut(input):
     
     return rack
 
+def write_step_obj(slices,fname):
+    """_summary_
+
+    Args:
+        knots_slice (_type_): _description_
+        fname (_type_): _description_
+    """
+    step_obj = p21.new_step_file()
+
+    step_obj.header.set_file_description(('STEP AP214',), '2;1')
+    step_obj.header.set_file_name(name=fname, time_stamp=p21.timestamp(), organization=('LV', 'Visconti_L'), autorization='LV')
+    step_obj.header.set_file_schema(('AUTOMOTIVE_DESIGN', ))
+
+    data = step_obj.new_data_section()
+
+    data.add(p21.simple_instance('#1', 'APPLICATION_CONTEXT', ('automotive_design', )))
+
+    data.add(p21.simple_instance('#2', 'APPLICATION_PROTOCOL_DEFINITION', ('draft international standard', 'automotive_design', 1998, p21.reference('#1'))))
+
+    data.add(p21.simple_instance('#3', 'PRODUCT', ('rack', '', '', p21.reference('#4'))))
+
+    data.add(p21.simple_instance('#4', 'PRODUCT_CONTEXT', ( 'NONE', p21.reference('#1'), 'mechanical' )))
+
+    data.add(p21.simple_instance('#5', 'PRODUCT_DEFINITION_FORMATION_WITH_SPECIFIED_SOURCE', ('EVERYTHING', '', p21.reference('#3'), p21.enum('.NOT_KNOWN.'))))
+
+    data.add(p21.simple_instance('#6', 'PRODUCT_RELATED_PRODUCT_CATEGORY', ('part', '', p21.reference('#3'))))
+    
+    data.add(p21.simple_instance('#7', 'PRODUCT_DEFINITION_CONTEXT', ('detailed design', p21.reference('#1'), 'design')))
+
+    data.add(p21.simple_instance('#8', 'PRODUCT_DEFINITION', ('NOT KNOWN', '', p21.reference('#5'), p21.reference('#7'))))
+
+    data.add(p21.simple_instance('#9', 'PRODUCT_DEFINITION_SHAPE', ('NONE', 'NONE', p21.reference('#8'))))
+
+    data.add(p21.simple_instance('#10', 'SHAPE_DEFINITION_REPRESENTATION', (p21.reference('#9'), p21.reference('#11'))))
+
+    data.add(p21.simple_instance('#11', 'GEOMETRICALLY_BOUNDED_WIREFRAME_SHAPE_REPRESENTATION', ('curves', (p21.reference('#17'), ), p21.reference('#12'))))
+
+    entitylist =[]
+    entitylist.append(p21.entity('GEOMETRIC_REPRESENTATION_CONTEXT', (3, )))
+    entitylist.append(p21.entity('GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT', (p21.reference('#13', ), )))
+    entitylist.append(p21.entity('GLOBAL_UNIT_ASSIGNED_CONTEXT', ((p21.reference('#14'), p21.reference('#15'), p21.reference('#16')), )))
+    entitylist.append(p21.entity('REPRESENTATION_CONTEXT', ('NONE', 'WORKSPACE')))
+    data.add(p21.complex_entity_instance('#12', entitylist))
+
+    data.add(p21.simple_instance('#13', 'UNCERTAINTY_MEASURE_WITH_UNIT', (1E-05, p21.reference('#14'), 'distance_accuracy_value', 'NONE')))
+
+    entitylist =[]
+    entitylist.append(p21.entity('LENGTH_UNIT', ()))
+    entitylist.append(p21.entity('NAMED_UNIT', (p21.unset_parameter('*'), )))
+    entitylist.append(p21.entity('SI_UNIT', (p21.enum('.MILLI.'), p21.enum('.METRE.'))))
+    data.add(p21.complex_entity_instance('#14', entitylist))
+
+    entitylist =[]
+    entitylist.append(p21.entity('NAMED_UNIT', (p21.unset_parameter('*'), )))
+    entitylist.append(p21.entity('PLANE_ANGLE_UNIT', ()))
+    entitylist.append(p21.entity('SI_UNIT', (p21.unset_parameter('$'), p21.enum('.RADIAN.'))))
+    data.add(p21.complex_entity_instance('#15', entitylist))
+
+    entitylist =[]
+    entitylist.append(p21.entity('NAMED_UNIT', (p21.unset_parameter('*'), )))
+    entitylist.append(p21.entity('SI_UNIT', (p21.unset_parameter('$'), p21.enum('.STERADIAN.'))))
+    entitylist.append(p21.entity('SOLID_ANGLE_UNIT', ()))
+    data.add(p21.complex_entity_instance('#16', entitylist))
+
+    curves_ref = []
+    for i, slice in enumerate(slices):
+        curves_in_slice_ref = []
+        
+        for j, curve in enumerate(slice):
+            
+            curveID = f'#{str(i+1)}{str(j+1).zfill(int(math.log10(len(slice)))+2)}'
+            curves_in_slice_ref.append(p21.reference(curveID))
+            points_ref = []
+            for k in range(len(curve[2])):
+                
+                pointID = f'{curveID}{str(k+1).zfill(int(math.log10(len(curve[2])))+1)}'
+                point_params = (f's:{str(i+1)} c:{str(j+1)} p:{str(k+1)}', (curve[2][k], curve[3][k], plane_height[i]))
+                data.add(p21.simple_instance(pointID,'CARTESIAN_POINT', point_params))
+                points_ref.append(p21.reference(pointID))
+                     
+            knots = tuple(curve[4][3:-3])
+            mult = tuple([4]+[1]*(len(knots)-2)+[4])
+            points_ref = tuple(points_ref)
+            curve_params = (f's:{str(i+1)} c:{str(j+1)}', 3, points_ref, p21.enum('.UNSPECIFIED.'), p21.enum('.F.'), p21.enum('.F.'), mult, knots, p21.enum('.UNSPECIFIED.'))
+            data.add(p21.simple_instance(curveID, 'B_SPLINE_CURVE_WITH_KNOTS', curve_params))
+        
+        curves_ref.extend(curves_in_slice_ref)
+
+    data.add(p21.simple_instance('#17','GEOMETRIC_CURVE_SET', ('list of curves',curves_ref)))
+    
+    return step_obj
+    
 if __name__ == '__main__':
 #endregion
 #region#################################################################################### Read configuration file    
@@ -393,7 +497,7 @@ if __name__ == '__main__':
     max_err = float(config['config']['max_err'])
     output_filename = config['config']['output_filename']
     pinion_filename = config['config']['pinion_filename']
-    show_plots = bool(config['config']['show_plots'])
+    show_plots = config['config']['show_plots'].lower() in ('true','t','t.','yes','y','y.','1')
 
 #endregion
 #region#################################################################################### Read pinion input file     
@@ -551,7 +655,7 @@ if __name__ == '__main__':
             knots_slice = pool.map(smoothing,input)
             knots_slices.append(knots_slice)
             
-    #Use the following to develop the function smoothing
+    #Use the following to develop the smoothing function
     # for slice in tqdm.tqdm(slices):
     #     knots_slice = []
     #     for curve in slice:
@@ -586,40 +690,18 @@ if __name__ == '__main__':
                     final_spline_y = final_spline(final_spline_x)
                     ax_2D.plot(final_spline_x,final_spline_y,'b')
                     ax_2D.plot(knots_slices[i][j][0],knots_slices[i][j][1],'og')
+                    ax_2D.plot(knots_slices[i][j][2],knots_slices[i][j][3],'--om')
 
         ax_2D.grid(True)
         plt.show()
         
 #endregion
 #region#################################################################################### Spline/STEP file creation  
-
-    result = cq.Workplane('XY')
-    for k, slice in enumerate(knots_slices):
-
-        for curve in slice:
-
-            MSpline_vec = []
-            spline_curve = []
-
-            for i in range(len(curve[0])):
-
-                MSpline_vec.append(cq.Vector(curve[0][i],curve[1][i],plane_height[k]))
-            
-            result.objects.append(cq.Edge.makeSpline(MSpline_vec))
-
-    for j in range(len(knots_slices[0])):
-
-        MSpline_vec_left = []
-        MSpline_vec_right = []
-
-        for k, slice in enumerate(knots_slices):
-
-            MSpline_vec_left.append(cq.Vector(slice[j][0][0],slice[j][1][0],plane_height[k]))
-            MSpline_vec_right.append(cq.Vector(slice[j][0][-1],slice[j][1][-1],plane_height[k]))
-
-        result.objects.append(cq.Edge.makeSpline(MSpline_vec_left))
-        result.objects.append(cq.Edge.makeSpline(MSpline_vec_right))
-
-    cq.exporters.export(result,f'Output\\{date_str}{output_filename}.STEP')
+    fname = f'{date_str}{output_filename}.STEP'
+    
+    stepfile = write_step_obj(knots_slices,fname)
+    
+    stepfile.save(f'Output\\{fname}')
 
 #endregion
+    
