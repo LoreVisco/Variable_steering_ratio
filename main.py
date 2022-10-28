@@ -3,8 +3,6 @@
 import sys
 import configparser as cp
 from multiprocessing import Pool, cpu_count
-from time import time
-import cadquery as cq
 import numpy as np
 from matplotlib import pyplot as plt
 from shapely import affinity
@@ -202,7 +200,8 @@ def smoothing(input):
         while curve[0][i+j]<=curve[0][i]:
             j+=1
         i += j
-                
+    x.append(curve[0][-1])
+    y.append(curve[1][-1])
     N = len(x)
     
     ################## tooth subdivision
@@ -248,10 +247,11 @@ def smoothing(input):
     smooth_fillet_x  = [fillet_x[0]]
     smooth_fillet_y = [fillet_y[0]]
     # In the following cycle the point i+j is checked to be good or bad by taking the line between point i and i+j and checking if there are following points on the left of the line (left is taken sitting on i and looking at i+j). This should ensure that the line is a tangent line for the fillet.
-    while i<N_fillet-1:
-        j = 1
+    while i<N_fillet-2:
+        j = 0
         pts_on_left = 1
-        while i+j<N_fillet and pts_on_left != 0:
+        while i+j<N_fillet-1 and pts_on_left != 0:
+            j += 1
             pts_on_left = 0
             m = (fillet_y[i+j]-fillet_y[i])/(fillet_x[i+j]-fillet_x[i])
             x1 = fillet_x[i]
@@ -266,11 +266,13 @@ def smoothing(input):
                 check = fillet_y[k]-y1>(fillet_x[k]-x1)*m
                 if check:
                     pts_on_left += 1
-            j += 1
-        i = i+j-1
-        smooth_fillet_x.append(fillet_x[i])
-        smooth_fillet_y.append(fillet_y[i])
-       
+        i = i+j
+        if i!=N_fillet-2:
+            smooth_fillet_x.append(fillet_x[i])
+            smooth_fillet_y.append(fillet_y[i])
+        
+    smooth_fillet_x.append(fillet_x[-1])
+    smooth_fillet_y.append(fillet_y[-1])
 
     smooth_curve_x = np.append(np.append(left_flank[0],smooth_fillet_x),right_flank[0])
     smooth_curve_y = np.append(np.append(left_flank[1],smooth_fillet_y),right_flank[1])
@@ -287,7 +289,7 @@ def smoothing(input):
     length_LUT = interpolate.interp1d(lengths,smooth_curve_x)
     
     max_err = allowed_err+1
-    number_of_points = 8
+    number_of_points = 2
     points_l = np.linspace(lengths[0],lengths[-1],number_of_points,endpoint=True)
     # the first and last knot of a B-spline have to have multiplicity k+1 where k is the spline order
     points_x = []
@@ -320,35 +322,84 @@ def smoothing(input):
     points_x = points_x[3:-3]
     points_y = interp(points_x)
     
-    x_first = points_x[0]
-    y_first = interp(x_first)
-    while y_first>1e-10:
-        m = 1/interpolate.splev(x_first,interp.tck,der=1,ext=0)
-        x_first = x_first - y_first*m
-        y_first = interp(x_first)
+    def extr(x,x0,interp):
+        y0,dy,ddy,dddy = interp(x0), interp(x0,1), interp(x0,2), interp(x0,3)
+        y = y0+dy*(x-x0)+ddy*(x-x0)**2+dddy*(x-x0)**3
+        return y
+    
+    x0 = points_x[0]
+    if abs(interp(x0))>1e-8:
         
-    x_last = points_x[-1]
-    y_last = interp(x_last)
-    while y_last>1e-8:
-        m = 1/interpolate.splev(x_last,interp.tck,der=1,ext=0)
-        x_last = x_last - y_last*m
-        y_last = interp(x_last)
+        a = b = x0
+        
+        while np.sign(extr(a,x0,interp))==1:
+                a -= allowed_err
     
-    if x_last>points_x[-2]:
-        points_x[-1] = x_last
+        while np.sign(extr(b,x0,interp))==-1:
+                b += allowed_err
     
-    if x_first<points_x[1]:
-        points_x[0] = x_first
-    
+        c = (a+b)/2
+        
+        while abs(extr(c,x0,interp))>1e-8:
+            
+            if np.sign(extr(a,x0,interp)*extr(c,x0,interp))==-1:
+                b = c
+            else:
+                a = c
+            c = (a+b)/2
+        points_x[0] = c
     points_y[0] = 0
+    
+    x0 = points_x[-1]
+    if abs(interp(x0))>1e-8:
+        a = b = x0
+        
+        while np.sign(extr(a,x0,interp))==-1:
+                a -= allowed_err
+    
+        while np.sign(extr(b,x0,interp))==1:
+                b += allowed_err
+        
+        c = (a+b)/2
+        
+        while abs(extr(c,x0,interp))>1e-8:
+            if np.sign(extr(a,x0,interp)*extr(c,x0,interp))==-1:
+                b = c
+            else:
+                a = c
+            c = (a+b)/2
+        points_x[-1] = c
     points_y[-1] = 0
     
-    final_spline = interpolate.make_interp_spline(points_x,points_y)
+    # x_first = points_x[0]
+    # y_first = interp(x_first)
+    # while y_first>1e-10:
+    #     m = 1/interpolate.splev(x_first,interp.tck,der=1,ext=0)
+    #     x_first = x_first - y_first*m
+    #     y_first = interp(x_first)
+        
+    # x_last = points_x[-1]
+    # y_last = interp(x_last)
+    # while y_last>1e-6:
+    #     m = 1/interpolate.splev(x_last,interp.tck,der=1,ext=0)
+    #     x_last = x_last - y_last*m
+    #     y_last = interp(x_last)
+    
+    # if x_last>points_x[-2]:
+    #     points_x[-1] = x_last
+    
+    # if x_first<points_x[1]:
+    #     points_x[0] = x_first
+    
+    # points_y[0] = 0
+    # points_y[-1] = 0
+        
+    final_spline = interpolate.make_interp_spline(points_x,points_y, bc_type='natural')
     control_points_y = final_spline.c
     control_points_x = [sum(final_spline.t[list(range(i+1,i+4))])/3 for i in range(len(final_spline.t)-4)]
     knots = final_spline.t
     
-    return [points_x, points_y, control_points_x, control_points_y, knots]
+    return [points_x, points_y,control_points_x, control_points_y, knots]
 
 def rack_cut(input):
     """
@@ -392,25 +443,15 @@ def write_step_obj(slices,fname):
     data = step_obj.new_data_section()
 
     data.add(p21.simple_instance('#1', 'APPLICATION_CONTEXT', ('automotive_design', )))
-
     data.add(p21.simple_instance('#2', 'APPLICATION_PROTOCOL_DEFINITION', ('draft international standard', 'automotive_design', 1998, p21.reference('#1'))))
-
     data.add(p21.simple_instance('#3', 'PRODUCT', ('rack', '', '', p21.reference('#4'))))
-
     data.add(p21.simple_instance('#4', 'PRODUCT_CONTEXT', ( 'NONE', p21.reference('#1'), 'mechanical' )))
-
     data.add(p21.simple_instance('#5', 'PRODUCT_DEFINITION_FORMATION_WITH_SPECIFIED_SOURCE', ('EVERYTHING', '', p21.reference('#3'), p21.enum('.NOT_KNOWN.'))))
-
     data.add(p21.simple_instance('#6', 'PRODUCT_RELATED_PRODUCT_CATEGORY', ('part', '', p21.reference('#3'))))
-    
     data.add(p21.simple_instance('#7', 'PRODUCT_DEFINITION_CONTEXT', ('detailed design', p21.reference('#1'), 'design')))
-
     data.add(p21.simple_instance('#8', 'PRODUCT_DEFINITION', ('NOT KNOWN', '', p21.reference('#5'), p21.reference('#7'))))
-
     data.add(p21.simple_instance('#9', 'PRODUCT_DEFINITION_SHAPE', ('NONE', 'NONE', p21.reference('#8'))))
-
     data.add(p21.simple_instance('#10', 'SHAPE_DEFINITION_REPRESENTATION', (p21.reference('#9'), p21.reference('#11'))))
-
     data.add(p21.simple_instance('#11', 'GEOMETRICALLY_BOUNDED_WIREFRAME_SHAPE_REPRESENTATION', ('curves', (p21.reference('#17'), ), p21.reference('#12'))))
 
     entitylist =[]
@@ -456,9 +497,9 @@ def write_step_obj(slices,fname):
                 data.add(p21.simple_instance(pointID,'CARTESIAN_POINT', point_params))
                 points_ref.append(p21.reference(pointID))
                      
-            knots = tuple(curve[4][3:-3])
-            mult = tuple([4]+[1]*(len(knots)-2)+[4])
-            points_ref = tuple(points_ref)
+            knots = list(curve[4][3:-3])
+            mult = [4]+[1]*(len(knots)-2)+[4]
+            points_ref = points_ref
             curve_params = (f's:{str(i+1)} c:{str(j+1)}', 3, points_ref, p21.enum('.UNSPECIFIED.'), p21.enum('.F.'), p21.enum('.F.'), mult, knots, p21.enum('.UNSPECIFIED.'))
             data.add(p21.simple_instance(curveID, 'B_SPLINE_CURVE_WITH_KNOTS', curve_params))
         
@@ -497,7 +538,7 @@ if __name__ == '__main__':
     max_err = float(config['config']['max_err'])
     output_filename = config['config']['output_filename']
     pinion_filename = config['config']['pinion_filename']
-    show_plots = config['config']['show_plots'].lower() in ('true','t','t.','yes','y','y.','1')
+    show_plots = config['config']['show_plots'].lower() in ('true','t','t.','vero','v','v.','yes','y','y.','si','s','1')
 
 #endregion
 #region#################################################################################### Read pinion input file     
@@ -666,7 +707,7 @@ if __name__ == '__main__':
 #region#################################################################################### Plots                      
     # Inizialization of the figures used check the result and to debug the code
     
-    slice_to_check = 0 #np.ceil(height_discretizations/2)
+    slice_to_check = 21 #np.ceil(height_discretizations/2)
     
     if show_plots:
         fig = plt.figure()
@@ -688,7 +729,9 @@ if __name__ == '__main__':
                     final_spline = interpolate.make_interp_spline(knots_slices[i][j][0],knots_slices[i][j][1],bc_type='natural')
                     final_spline_x = np.linspace(final_spline.t[0],final_spline.t[-1],1000,endpoint=True)
                     final_spline_y = final_spline(final_spline_x)
+                    final_spline_y_comp = interpolate.splev(final_spline_x,(knots_slices[i][j][4],knots_slices[i][j][3],3))
                     ax_2D.plot(final_spline_x,final_spline_y,'b')
+                    ax_2D.plot(final_spline_x,final_spline_y_comp,'r')
                     ax_2D.plot(knots_slices[i][j][0],knots_slices[i][j][1],'og')
                     ax_2D.plot(knots_slices[i][j][2],knots_slices[i][j][3],'--om')
 
