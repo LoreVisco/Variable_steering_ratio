@@ -16,6 +16,20 @@ from steputils import p21
 #endregion
 #region#################################################################################### Functions definition       
 
+class extrapolation:
+    def __init__(self,x0,interp):
+        
+        self.x0 = x0
+        self.y0 = interp(x0)
+        self.dy = interp(x0,1)
+        self.ddy = interp(x0,2)
+        self.dddy = interp(x0,3)
+        
+    def __call__(self,x):
+        
+        y = self.y0+self.dy*(x-self.x0)+self.ddy*(x-self.x0)**2+self.dddy*(x-self.x0)**3
+        return y
+
 def delta_2_joint(delta_1,beta,alpha):
     
     """
@@ -322,27 +336,25 @@ def smoothing(input):
     points_x = points_x[3:-3]
     points_y = interp(points_x)
     
-    def extr(x,x0,interp):
-        y0,dy,ddy,dddy = interp(x0), interp(x0,1), interp(x0,2), interp(x0,3)
-        y = y0+dy*(x-x0)+ddy*(x-x0)**2+dddy*(x-x0)**3
-        return y
     
     x0 = points_x[0]
+    extr = extrapolation(x0,interp)
+
     if abs(interp(x0))>1e-8:
         
         a = b = x0
         
-        while np.sign(extr(a,x0,interp))==1:
+        while np.sign(extr(a))==1:
                 a -= allowed_err
     
-        while np.sign(extr(b,x0,interp))==-1:
+        while np.sign(extr(b))==-1:
                 b += allowed_err
     
         c = (a+b)/2
         
-        while abs(extr(c,x0,interp))>1e-8:
+        while abs(extr(c))>1e-8:
             
-            if np.sign(extr(a,x0,interp)*extr(c,x0,interp))==-1:
+            if np.sign(extr(a)*extr(c))==-1:
                 b = c
             else:
                 a = c
@@ -351,48 +363,26 @@ def smoothing(input):
     points_y[0] = 0
     
     x0 = points_x[-1]
+    extr = extrapolation(x0,interp)
     if abs(interp(x0))>1e-8:
         a = b = x0
         
-        while np.sign(extr(a,x0,interp))==-1:
+        while np.sign(extr(a))==-1:
                 a -= allowed_err
     
-        while np.sign(extr(b,x0,interp))==1:
+        while np.sign(extr(b))==1:
                 b += allowed_err
         
         c = (a+b)/2
         
-        while abs(extr(c,x0,interp))>1e-8:
-            if np.sign(extr(a,x0,interp)*extr(c,x0,interp))==-1:
+        while abs(extr(c))>1e-8:
+            if np.sign(extr(a)*extr(c))==-1:
                 b = c
             else:
                 a = c
             c = (a+b)/2
         points_x[-1] = c
     points_y[-1] = 0
-    
-    # x_first = points_x[0]
-    # y_first = interp(x_first)
-    # while y_first>1e-10:
-    #     m = 1/interpolate.splev(x_first,interp.tck,der=1,ext=0)
-    #     x_first = x_first - y_first*m
-    #     y_first = interp(x_first)
-        
-    # x_last = points_x[-1]
-    # y_last = interp(x_last)
-    # while y_last>1e-6:
-    #     m = 1/interpolate.splev(x_last,interp.tck,der=1,ext=0)
-    #     x_last = x_last - y_last*m
-    #     y_last = interp(x_last)
-    
-    # if x_last>points_x[-2]:
-    #     points_x[-1] = x_last
-    
-    # if x_first<points_x[1]:
-    #     points_x[0] = x_first
-    
-    # points_y[0] = 0
-    # points_y[-1] = 0
         
     final_spline = interpolate.make_interp_spline(points_x,points_y, bc_type='natural')
     control_points_y = final_spline.c
@@ -508,9 +498,8 @@ def write_step_obj(slices,fname):
     data.add(p21.simple_instance('#17','GEOMETRIC_CURVE_SET', ('list of curves',curves_ref)))
     
     return step_obj
-    
+#endregion    
 if __name__ == '__main__':
-#endregion
 #region#################################################################################### Read configuration file    
 
     if len(sys.argv) < 2:
