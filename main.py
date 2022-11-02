@@ -1,4 +1,4 @@
-#region#################################################################################### Header                     
+#region#################################################################################### Header
 
 import sys
 import configparser as cp
@@ -14,7 +14,7 @@ from scipy import interpolate
 from steputils import p21
 
 #endregion
-#region#################################################################################### Functions definition       
+#region#################################################################################### Functions definition
 
 class extrapolation:
     def __init__(self,x0,interp):
@@ -30,86 +30,157 @@ class extrapolation:
         y = self.y0+self.dy*(x-self.x0)+self.ddy*(x-self.x0)**2+self.dddy*(x-self.x0)**3
         return y
 
-def delta_2_joint(delta_1,beta,alpha):
+class universal_joint:
+    def __init__(self,alpha,beta):
+        
+        self.a = alpha*np.pi/180 
+        self.b = beta*np.pi/180
     
-    """
-    DIRECT FUNCTION OF THE UNIVERSAL JOINT
-    
-    computes the angle of the output shaft delta_2 for a given configuration of the an universal joint, defined by the input shaft angle delta_1, the joint angle alpha and the phase angle beta. 
-    
-    ════════════════════════════════
-    
-    In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
-    To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
-    Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
-    beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
-    The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
-    the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
-    
-    ════════════════════════════════
-    
-    Args:
-        delta_1 (float): input shaft angle in [deg]
-        beta (float): phase angle in [deg] in the range (-90,90]
-        alpha (float): joint angle in [deg] in the range [0,90)
+    def delta1(self,delta2):
+        """
+        INVERSE FUNCTION OF THE UNIVERSAL JOINT
+        
+        computes the angle of the input shaft delta_1 for a given configuration of the an universal joint, defined by the output shaft angle delta_2, the joint angle alpha and the phase angle beta. 
+        
+        ════════════════════════════════
+        
+        In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
+        To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
+        Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
+        beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
+        The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
+        the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
+        
+        ════════════════════════════════
+        
+        Args:
+            delta_2 (float): output shaft angle in [deg]
+            beta (float): phase angle in [deg] in the range (-90,90]
+            alpha (float): joint angle in [deg] in the range [0,90)
 
-    Returns:
-        float: output shaft angle in [deg]
-    """
+        Returns:
+            float: input shaft angle in [deg]
+        """
+        
+        d = delta2*np.pi/180
+        a = self.a
+        b = self.b
 
-    d = delta_1*np.pi/180
-    b = beta*np.pi/180
-    a = alpha*np.pi/180
+        correction = np.pi*np.ceil((d-np.pi/2+np.arctan2(np.tan(b),np.cos(a)))/np.pi)
 
-    correction = np.pi*np.ceil((d-np.pi/2+b)/np.pi)
-    
-    delta_2 = np.arctan2(np.tan(d+b),np.cos(a))-np.arctan2(np.tan(b),np.cos(a))+correction
-    
-    return delta_2*180/np.pi
+        delta1 = np.arctan(np.cos(a)*np.tan(d+np.arctan2(np.tan(b),np.cos(a))))-b+correction
 
-def delta_1_joint(delta_2,beta,alpha):
+        return delta1*180/np.pi
     
-    """
-    INVERSE FUNCTION OF THE UNIVERSAL JOINT
-    
-    computes the angle of the input shaft delta_1 for a given configuration of the an universal joint, defined by the output shaft angle delta_2, the joint angle alpha and the phase angle beta. 
-    
-    ════════════════════════════════
-    
-    In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
-    To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
-    Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
-    beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
-    The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
-    the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
-    
-    ════════════════════════════════
-    
-    Args:
-        delta_2 (float): output shaft angle in [deg]
-        beta (float): phase angle in [deg] in the range (-90,90]
-        alpha (float): joint angle in [deg] in the range [0,90)
+    def delta2(self,delta1):
+        """
+        DIRECT FUNCTION OF THE UNIVERSAL JOINT
+        
+        computes the angle of the output shaft delta_2 for a given configuration of the an universal joint, defined by the input shaft angle delta_1, the joint angle alpha and the phase angle beta. 
+        
+        ════════════════════════════════
+        
+        In an universal joint two shafts are involved, input and output shafts, the angular position of the input shaft is called delta_1. Starting from this labeling of the shafts we can define the two angles alpha and beta.
+        To do so let's create a fixed frame of reference on the end of the input shaft, the z axis aligned with the shaft axis, the x axis on the plane on which the two shafts lie in the direction of the output shaft and the y axis according with right hand rule.
+        Then we create another fixed frame of reference rotated about the z-axis of an angle beta, that frame of reference is the one from which the angle delta_1 is measured, still according with the right-hand rule. 
+        beta is called phase angle, in fact the function has a 180 degree periodicity and beta defines the starting point in the period, it is usually set to zero or 90 degree, values at which the transmission ratio (D delta_2)/(D delta_1) has a maximum and a minimum respectively.
+        The function is built in such a way that delta_2=0 when delta_1=0, this is because we are often interested just in the difference between the input angle delta_1 and the output angle delta_2.
+        the joint angle alpha is the acute angle between the input shaft and the output shaft, it should be positive definite.
+        
+        ════════════════════════════════
+        
+        Args:
+            delta_1 (float): input shaft angle in [deg]
+            beta (float): phase angle in [deg] in the range (-90,90]
+            alpha (float): joint angle in [deg] in the range [0,90)
 
-    Returns:
-        float: input shaft angle in [deg]
-    """
+        Returns:
+            float: output shaft angle in [deg]
+        """
+        a = self.a
+        b = self.b
+        d = delta1*np.pi/180
+        
+        correction = np.pi*np.ceil((d-np.pi/2+b)/np.pi)
+        
+        delta2 = np.arctan2(np.tan(d+b),np.cos(a))-np.arctan2(np.tan(b),np.cos(a))+correction
+        
+        return delta2*180/np.pi
+
+class rack_variable_ratio:
+    def __init__(self,initial_ratio,Delta_ratio,delta_transition) -> None:
+        
+        self.initial_ratio = initial_ratio
+        self.Delta_ratio = Delta_ratio
+        self.delta_transition = delta_transition
+        
+    def disp(self,steering):
+        """
+        DIRECT FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
+        
+        This function computes the rack displacement for a given steering angle and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
+        
+        ════════════════════════════════
+        
+        The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the position, the intergral function have been found. The function computes the displacement of the rack as a function of steering angle for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
+        
+        ════════════════════════════════
+        
+        Args:
+            delta (float): input steering angle in [deg]
+            initial_ratio (float): steering ratio in [mm/deg] at delta=0
+            Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
+            delta_transition (float): steering angle in [deg] at which the final steering is reached
+
+        Returns:
+            float: steering rack displacemente
+        """
+        
+        tau_i = self.initial_ratio
+        D_tau = self.Delta_ratio
+        d_t = self.delta_transition
+        d = steering
+        
+        disp = (tau_i+D_tau)*d - D_tau*d_t/2*np.sqrt(np.pi/3)*math.erf(d/d_t*np.sqrt(3))
+        return disp
     
-    # theta is the angular position of the input shaft
-    # beta is the phase angle of the joint, when theta is equal to zero beta is the angle between the hinge axis of the first shaft and the shafts plane, it is usually set to 0 or 90 deg
-    # alpha is the joint angle, in other words it is the acute angle between the first and second shaft's axis 
-    
-    # conversion of the three angles in [rad]
-    d = delta_2*np.pi/180
-    b = beta*np.pi/180
-    a = alpha*np.pi/180
+    def steer(self,displacement):
+        """
+        INVERSE FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
+        
+        This function computes the steering angle for a given rack displacement and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
+        
+        ════════════════════════════════
+        
+        The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the steering angle, the intergral function have been found and then numerically inverted. The function computes the steering angle as a function of rack displacement for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
+        
+        ════════════════════════════════
 
-    # Correction of the points of discontinuity of the function
-    correction = np.pi*np.ceil((d-np.pi/2+np.arctan2(np.tan(b),np.cos(a)))/np.pi)
+        Args:
+            displacement (float): steering rack displacement in [mm]
+            initial_ratio (float): steering ratio in [mm/deg] at delta=0
+            Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
+            delta_transition (float): steering angle in [deg] at which the final steering is reached
 
-    delta_1 = np.arctan(np.cos(a)*np.tan(d+np.arctan2(np.tan(b),np.cos(a))))-b+correction
 
-    return delta_1*180/np.pi
-
+        Returns:
+            float: steering angle in [deg]
+        """
+        
+        
+        tau_i = self.initial_ratio
+        D_tau = self.Delta_ratio
+        d_t = self.delta_transition
+        disp = displacement
+        
+        d = disp/(tau_i+D_tau) #initial guess
+        err = 1
+        while abs(err)>1e-10:
+            d_old = d
+            d = (disp + D_tau*d_t/2*np.sqrt(np.pi/3)*math.erf(np.sqrt(3)*d_old/d_t))/(tau_i + Delta_ratio)
+            err = abs((d-d_old)/d)
+        return d
+                
 def deriv(y,x):
     """
     DERIVATIVE FUNCTION OF Y WITH RESPECT TO X
@@ -132,62 +203,6 @@ def deriv(y,x):
         dy[i] = (y[i+1]-y[i])/(x[i+1]-x[i])
     dy[i+1] = dy[i]+(x[i+1]-x[i])*(dy[i]-dy[i-1])/(x[i]-x[i-1])
     return dy
-
-def variable_ratio_fun(delta,initial_ratio,Delta_ratio,delta_transition):
-    """
-    DIRECT FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
-    
-    This function computes the rack displacement for a given steering angle and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
-    
-    ════════════════════════════════
-    
-    The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the position, the intergral function have been found. The function computes the displacement of the rack as a function of steering angle for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
-    
-    ════════════════════════════════
-    
-    Args:
-        delta (float): input steering angle in [deg]
-        initial_ratio (float): steering ratio in [mm/deg] at delta=0
-        Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
-        delta_transition (float): steering angle in [deg] at which the final steering is reached
-
-    Returns:
-        float: steering rack displacemente
-    """
-    
-    displacement = (initial_ratio+Delta_ratio)*delta - Delta_ratio*delta_transition/2*np.sqrt(np.pi/3)*math.erf(delta/delta_transition*np.sqrt(3))
-    return displacement
-
-def variable_ratio_inverse(displacement,initial_ratio,Delta_ratio,delta_transition):
-    """
-    INVERSE FUNCTION OF RACK DISPLACEMENT FOR A VARIABLE STEERING RATIO
-    
-    This function computes the steering angle for a given rack displacement and the chosen steering ratio profile, which is given by the three parameters: initial_ratio, Delta_ratio, delta_transition.
-    
-    ════════════════════════════════
-    
-    The variable steering ratio function is chosen to be of the kind 1-e^(delta)^2, this allows to have a very smoothly changing ratio with a zero derivative for delta=0. In order to compute the steering angle, the intergral function have been found and then numerically inverted. The function computes the steering angle as a function of rack displacement for the given profile, where the initial ratio is the desired steering ratio for delta=0, Delta_ratio is the difference between final and initial steering ratio and delta_transition is the steering angle at which the final steering ratio have to be reached.
-    
-    ════════════════════════════════
-
-    Args:
-        displacement (float): steering rack displacement in [mm]
-        initial_ratio (float): steering ratio in [mm/deg] at delta=0
-        Delta_ratio (float): difference between final and initial steering ratio (negative values are allowed)
-        delta_transition (float): steering angle in [deg] at which the final steering is reached
-
-
-    Returns:
-        float: steering angle in [deg]
-    """
-    
-    delta = displacement/(initial_ratio+Delta_ratio)
-    err = 1
-    while abs(err)>1e-10:
-        delta_old = delta
-        delta = (displacement + Delta_ratio*delta_transition/2*np.sqrt(np.pi/3)*math.erf(np.sqrt(3)*delta_old/delta_transition))/(initial_ratio + Delta_ratio)
-        err = abs((delta-delta_old)/delta)
-    return delta
 
 def smoothing(input):
     """
@@ -500,7 +515,7 @@ def write_step_obj(slices,fname):
     return step_obj
 #endregion    
 if __name__ == '__main__':
-#region#################################################################################### Read configuration file    
+#region#################################################################################### Read configuration file
 
     if len(sys.argv) < 2:
         cfg_file = 'Input\\defaultcfg2D.cfg'
@@ -530,7 +545,7 @@ if __name__ == '__main__':
     show_plots = config['config']['show_plots'].lower() in ('true','t','t.','vero','v','v.','yes','y','y.','si','s','1')
 
 #endregion
-#region#################################################################################### Read pinion input file     
+#region#################################################################################### Read pinion input file
 
     # Import of the pinion section from a .xyz file, each line of this file contain the coordinates of the points of the boundary of the section
     pinion_points = []
@@ -542,7 +557,7 @@ if __name__ == '__main__':
             pinion_points.append([float(x),float(y)])
             
 #endregion
-#region#################################################################################### Constants definition       
+#region#################################################################################### Constants definition
 
     date_str = datetime.now().strftime("%y%m%d_%H%M_")
 
@@ -551,30 +566,32 @@ if __name__ == '__main__':
     tip_index = find_tip_radius.index(tip_radius)
     initial_rotation = np.pi/2-np.arctan2(pinion_points[tip_index][1],pinion_points[tip_index][0])
 
+    Ujoint = universal_joint(alpha,beta)
+    var_ratio = rack_variable_ratio(rack_ratio,Delta_ratio,delta_trans)
     m = mn/np.cos(helix_angle*np.pi/180)
-    extreme_steering_wheel_angle = variable_ratio_inverse(rack_stroke,rack_ratio,Delta_ratio,delta_trans)
+    extreme_steering_wheel_angle = var_ratio.steer(rack_stroke)
     z = round(2*rp/m)
     angle_bw_teeth = 360/z
-    ext_angle = (math.ceil(delta_2_joint(extreme_steering_wheel_angle,beta,alpha)/angle_bw_teeth+0.5)+1)*angle_bw_teeth
+    ext_angle = (math.ceil(Ujoint.delta2(extreme_steering_wheel_angle)/angle_bw_teeth + 0.5) + 1)*angle_bw_teeth
     axis_distance = rp-m*(1-c)
     delta_pinion_tip_exit = np.arccos(axis_distance/tip_radius)*180/np.pi
     delta_pinion_tooth_completion = rack_height/2/rp*np.tan(helix_angle*np.pi/180)*180/np.pi
     delta_pinion_overtravel = delta_pinion_tip_exit + delta_pinion_tooth_completion
-    l_right = variable_ratio_fun(ext_angle+delta_pinion_overtravel,rack_ratio,Delta_ratio,delta_trans)+tip_radius
-    l_left = variable_ratio_fun(delta_pinion_overtravel,rack_ratio,Delta_ratio,delta_trans)+tip_radius
-    rack_thickness = tip_radius-axis_distance+1
+    l_right = var_ratio.disp(ext_angle+delta_pinion_overtravel) + tip_radius
+    l_left = var_ratio.disp(delta_pinion_overtravel) + tip_radius
+    rack_thickness = tip_radius - axis_distance + 1
 
 #endregion
-#region#################################################################################### Arrays definition          
+#region#################################################################################### Arrays definition
 
     delta_pinion = np.arange(-delta_pinion_overtravel,ext_angle+delta_pinion_overtravel,deg_step)
 
     N = len(delta_pinion)
 
-    delta_wheel = [delta_1_joint(d,beta,alpha) for d in delta_pinion]
+    delta_wheel = [Ujoint.delta1(d) for d in delta_pinion]
     # delta_pinion = delta_wheel # Activate this line if you want to deactivate cardanic joint correction
 
-    rack_disp = [variable_ratio_fun(d,rack_ratio,Delta_ratio,delta_trans) for d in delta_wheel]
+    rack_disp = [var_ratio.disp(d) for d in delta_wheel]
 
     plane_height = np.linspace(-rack_height/2, rack_height/2, height_discretizations, endpoint=True)
     
@@ -588,7 +605,7 @@ if __name__ == '__main__':
         ax_fun.plot(rack_disp,delta_pinion_ratio)
 
 #endregion
-#region#################################################################################### Slicing    
+#region#################################################################################### Slicing
          
     pinion = Polygon(pinion_points)
     pinion = affinity.rotate(pinion,initial_rotation,origin=(0,0),use_radians=True)
@@ -626,9 +643,9 @@ if __name__ == '__main__':
     
     for j, height in enumerate(plane_height):
         
-        first_midpoint_x = variable_ratio_fun(delta_1_joint(-height/rp*np.tan(helix_angle)*180/np.pi,beta,alpha),rack_ratio,Delta_ratio,delta_trans)
-        last_midpoint_x = variable_ratio_fun(delta_1_joint(ext_angle-height/rp*np.tan(helix_angle)*180/np.pi,beta,alpha),rack_ratio,Delta_ratio,delta_trans)
-        
+        pinion_helix_offset = height/rp*np.tan(helix_angle)*180/np.pi
+        first_midpoint_x = var_ratio.disp(Ujoint.delta1(-pinion_helix_offset))
+        last_midpoint_x = var_ratio.disp(Ujoint.delta1(ext_angle-pinion_helix_offset))
         
         rack_x, rack_y = np.array(rack_polygon[j].exterior.xy)
         
@@ -672,7 +689,7 @@ if __name__ == '__main__':
         slices.append(slice)
         
 #endregion
-#region#################################################################################### Smoothing                  
+#region#################################################################################### Smoothing
 
     print("Smoothing the curves...")
     knots_slices = []
@@ -693,7 +710,7 @@ if __name__ == '__main__':
     #     knots_slices.append(knots_slice)
 
 #endregion
-#region#################################################################################### Plots                      
+#region#################################################################################### Plots
     # Inizialization of the figures used check the result and to debug the code
     
     slice_to_check = 21 #np.ceil(height_discretizations/2)
@@ -728,7 +745,8 @@ if __name__ == '__main__':
         plt.show()
         
 #endregion
-#region#################################################################################### Spline/STEP file creation  
+#region#################################################################################### Spline/STEP file creation
+    
     fname = f'{date_str}{output_filename}.STEP'
     
     stepfile = write_step_obj(knots_slices,fname)
