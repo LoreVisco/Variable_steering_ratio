@@ -14,6 +14,7 @@ from scipy import interpolate
 from steputils import p21
 
 #endregion
+
 #region#################################################################################### Functions definition
 
 class extrapolation:
@@ -108,6 +109,7 @@ class universal_joint:
         return delta2*180/np.pi
 
 class rack_variable_ratio:
+    
     def __init__(self,initial_ratio,Delta_ratio,delta_transition) -> None:
         
         self.initial_ratio = initial_ratio
@@ -226,8 +228,10 @@ def smoothing(input):
         x.append(curve[0][i])
         y.append(curve[1][i])
         j = 1
-        while curve[0][i+j]<=curve[0][i]:
+        while curve[0][i+j]<=curve[0][i] or curve[0][-1]<=curve[0][i+j]:
             j+=1
+            if i+j==N:
+                break
         i += j
     x.append(curve[0][-1])
     y.append(curve[1][-1])
@@ -295,13 +299,14 @@ def smoothing(input):
                 check = fillet_y[k]-y1>(fillet_x[k]-x1)*m
                 if check:
                     pts_on_left += 1
-        i = i+j
+        i += j
         if i!=N_fillet-2:
             smooth_fillet_x.append(fillet_x[i])
             smooth_fillet_y.append(fillet_y[i])
-        
-    smooth_fillet_x.append(fillet_x[-1])
-    smooth_fillet_y.append(fillet_y[-1])
+    
+    if N_fillet>1:
+        smooth_fillet_x.append(fillet_x[-1])
+        smooth_fillet_y.append(fillet_y[-1])
 
     smooth_curve_x = np.append(np.append(left_flank[0],smooth_fillet_x),right_flank[0])
     smooth_curve_y = np.append(np.append(left_flank[1],smooth_fillet_y),right_flank[1])
@@ -514,11 +519,13 @@ def write_step_obj(slices,fname):
     
     return step_obj
 #endregion    
+
 if __name__ == '__main__':
+
 #region#################################################################################### Read configuration file
 
     if len(sys.argv) < 2:
-        cfg_file = 'Input\\defaultcfg2D.cfg'
+        cfg_file = 'Input/defaultcfg2D.cfg'
     else:
         cfg_file = sys.argv[1]
 
@@ -545,11 +552,12 @@ if __name__ == '__main__':
     show_plots = config['config']['show_plots'].lower() in ('true','t','t.','vero','v','v.','yes','y','y.','si','s','1')
 
 #endregion
+
 #region#################################################################################### Read pinion input file
 
     # Import of the pinion section from a .xyz file, each line of this file contain the coordinates of the points of the boundary of the section
     pinion_points = []
-    with open(f'Input\\{pinion_filename}') as pinion_file:
+    with open(f'Input/{pinion_filename}') as pinion_file:
         lines = pinion_file.readlines()
         # For each line I extract the x and y coordinates and assign them to the variable pinion_points
         for line in lines:
@@ -557,6 +565,7 @@ if __name__ == '__main__':
             pinion_points.append([float(x),float(y)])
             
 #endregion
+
 #region#################################################################################### Constants definition
 
     date_str = datetime.now().strftime("%y%m%d_%H%M_")
@@ -572,16 +581,20 @@ if __name__ == '__main__':
     extreme_steering_wheel_angle = var_ratio.steer(rack_stroke)
     z = round(2*rp/m)
     angle_bw_teeth = 360/z
-    ext_angle = (math.ceil(Ujoint.delta2(extreme_steering_wheel_angle)/angle_bw_teeth + 0.5) + 1)*angle_bw_teeth
+    N_complete_teeth = math.ceil(Ujoint.delta2(extreme_steering_wheel_angle)/angle_bw_teeth + 1)
+    ext_angle = N_complete_teeth*angle_bw_teeth
     axis_distance = rp-m*(1-c)
     delta_pinion_tip_exit = np.arccos(axis_distance/tip_radius)*180/np.pi
     delta_pinion_tooth_completion = rack_height/2/rp*np.tan(helix_angle*np.pi/180)*180/np.pi
     delta_pinion_overtravel = delta_pinion_tip_exit + delta_pinion_tooth_completion
-    l_right = var_ratio.disp(ext_angle+delta_pinion_overtravel) + tip_radius
+    l_right = var_ratio.disp(ext_angle + delta_pinion_overtravel) + tip_radius
     l_left = var_ratio.disp(delta_pinion_overtravel) + tip_radius
     rack_thickness = tip_radius - axis_distance + 1
+    
+    slice_to_check = 11 #np.ceil(height_discretizations/2)
 
 #endregion
+
 #region#################################################################################### Arrays definition
 
     delta_pinion = np.arange(-delta_pinion_overtravel,ext_angle+delta_pinion_overtravel,deg_step)
@@ -605,6 +618,7 @@ if __name__ == '__main__':
         ax_fun.plot(rack_disp,delta_pinion_ratio)
 
 #endregion
+
 #region#################################################################################### Slicing
          
     pinion = Polygon(pinion_points)
@@ -635,7 +649,7 @@ if __name__ == '__main__':
     if show_plots:
         fig = plt.figure()
         ax_3D = fig.add_subplot(projection='3d')
-        ax_3D.axis('equal')
+        ax_3D.axis('equal')#
         for k, slice in enumerate(rack_polygon):
             x, y = slice.exterior.xy
             ax_3D.plot(x,y,plane_height[k])
@@ -671,7 +685,6 @@ if __name__ == '__main__':
         rack_x = np.concatenate((rack_x[ind:],rack_x[:ind-4]))
         rack_y = np.concatenate((rack_y[ind:],rack_y[:ind-4]))
         
-
         indicies = np.where(rack_y==0)
     
         first_midpoint_index = (np.abs(rack_x-first_midpoint_x)).argmin()
@@ -687,8 +700,22 @@ if __name__ == '__main__':
             slice.append([rack_x[start:end+1],rack_y[start:end+1]])
             i +=2
         slices.append(slice)
+    
+    for slice in slices:
+        if len(slice)!=N_complete_teeth+1:
+            raise ValueError('Pointing!')
+        
+        
+    if show_plots:
+        fig = plt.figure()
+        ax_2D = fig.add_subplot()
+        ax_2D.axis('equal')
+        for curve in slices[slice_to_check]:
+            ax_2D.plot(curve[0],curve[1],'.r')
+
         
 #endregion
+
 #region#################################################################################### Smoothing
 
     print("Smoothing the curves...")
@@ -710,34 +737,30 @@ if __name__ == '__main__':
     #     knots_slices.append(knots_slice)
 
 #endregion
+
 #region#################################################################################### Plots
     # Inizialization of the figures used check the result and to debug the code
     
-    slice_to_check = 21 #np.ceil(height_discretizations/2)
+    
     
     if show_plots:
         fig = plt.figure()
         ax_3D = fig.add_subplot(projection='3d')
-        ax_3D.axis('equal')
-        fig = plt.figure()
-        ax_2D = fig.add_subplot()
-        ax_2D.axis('equal')
+        ax_3D.axis('equal')#
         
         for i in range(height_discretizations):
 
             for j in range(len(knots_slices[i])):
 
-                ax_3D.plot(knots_slices[i][j][0],knots_slices[i][j][1],plane_height[i],'b')
-
+                final_spline = interpolate.make_interp_spline(knots_slices[i][j][0],knots_slices[i][j][1],bc_type='natural')
+                final_spline_x = np.linspace(final_spline.t[0],final_spline.t[-1],1000,endpoint=True)
+                final_spline_y = final_spline(final_spline_x)
+                ax_3D.plot(final_spline_x,final_spline_y,plane_height[i],'b')
+                
                 if i == slice_to_check:
 
-                    ax_2D.plot(slices[i][j][0],slices[i][j][1],'.r')
-                    final_spline = interpolate.make_interp_spline(knots_slices[i][j][0],knots_slices[i][j][1],bc_type='natural')
-                    final_spline_x = np.linspace(final_spline.t[0],final_spline.t[-1],1000,endpoint=True)
-                    final_spline_y = final_spline(final_spline_x)
                     final_spline_y_comp = interpolate.splev(final_spline_x,(knots_slices[i][j][4],knots_slices[i][j][3],3))
                     ax_2D.plot(final_spline_x,final_spline_y,'b')
-                    ax_2D.plot(final_spline_x,final_spline_y_comp,'r')
                     ax_2D.plot(knots_slices[i][j][0],knots_slices[i][j][1],'og')
                     ax_2D.plot(knots_slices[i][j][2],knots_slices[i][j][3],'--om')
 
@@ -745,6 +768,7 @@ if __name__ == '__main__':
         plt.show()
         
 #endregion
+
 #region#################################################################################### Spline/STEP file creation
     
     fname = f'{date_str}{output_filename}.STEP'
@@ -754,4 +778,3 @@ if __name__ == '__main__':
     stepfile.save(f'Output\\{fname}')
 
 #endregion
-    

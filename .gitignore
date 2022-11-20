@@ -130,6 +130,7 @@ dmypy.json
 
 # FOLDERS
 OUTPUT/
+.vscode/
 
 # FILES
 *.STEP
