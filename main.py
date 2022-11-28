@@ -659,7 +659,7 @@ if __name__ == '__main__':
         
         pinion_helix_offset = height/rp*np.tan(helix_angle)*180/np.pi
         first_midpoint_x = var_ratio.disp(Ujoint.delta1(-pinion_helix_offset))
-        last_midpoint_x = var_ratio.disp(Ujoint.delta1(ext_angle-pinion_helix_offset))
+        last_midpoint_x = var_ratio.disp(Ujoint.delta1(ext_angle+angle_bw_teeth-pinion_helix_offset))
         
         rack_x, rack_y = np.array(rack_polygon[j].exterior.xy)
         
@@ -692,7 +692,7 @@ if __name__ == '__main__':
 
         i = n
         slice = []
-        while rack_x[indicies[0][i]]<last_midpoint_x:
+        while rack_x[indicies[0][i+1]]<last_midpoint_x:
 
             start = indicies[0][i]
             end = indicies[0][i+1]
