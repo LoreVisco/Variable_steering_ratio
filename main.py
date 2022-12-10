@@ -12,7 +12,6 @@ import tqdm
 from datetime import datetime
 from scipy import interpolate
 from steputils import p21
-import matplotlib.patches as patches
 
 # endregion
 
@@ -448,12 +447,34 @@ def rack_cut(input):
 
     rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance = input
 
+    # fig = plt.figure()
+    # ax_boolean = fig.add_subplot()
+    # ax_boolean.axis('equal')
+    # ax_boolean.set_ylabel('y [mm]')
+    # ax_boolean.set_xlabel('x [mm]')
+    # ax_boolean.set_title('Boolan subtraction')
+    # print_index = round(len(delta_pinion)/3)-5
+
     for i in range(len(delta_pinion)):
         theta = delta_pinion[i]*np.pi/180 - section_rotation
         affinity_matrix = [np.cos(
             theta), -np.sin(theta), np.sin(theta), np.cos(theta), rack_disp[i], -axis_distance]
         rack = rack.difference(
             affinity.affine_transform(pinion, affinity_matrix))
+
+        # only to generate picture for thesis
+    #     if i>print_index-15 and i<=print_index:
+
+    #         if i == print_index:
+    #             rackbool_x, rackbool_y = rack.exterior.xy
+    #             ax_boolean.fill(rackbool_x, rackbool_y,facecolor='#1f77b4', alpha=0.5, label='Rack')
+    #         if i%3==0:
+    #             pinionbool_x, pinionbool_y = affinity.affine_transform(pinion, affinity_matrix).exterior.xy
+    #             ax_boolean.fill(pinionbool_x, pinionbool_y,facecolor='#ff7f0e',  alpha=0.2)
+
+    # ax_boolean.set_xlim(-15, 20)
+    # plt.savefig('Output/boolean_subtraction.pdf',
+    #                 dpi='figure', format='pdf')
 
     return rack
 
@@ -591,7 +612,7 @@ def write_step_obj(slices, fname):
 
 if __name__ == '__main__':
 
-# region ########### Read configuration file
+    # region ########### Read configuration file
 
     if len(sys.argv) < 2:
         cfg_file = 'Input/defaultcfg2D.cfg'
@@ -645,7 +666,6 @@ if __name__ == '__main__':
     tip_index = find_tip_radius.index(tip_radius)
     initial_rotation = np.pi/2 - \
         np.arctan2(pinion_points[tip_index][1], pinion_points[tip_index][0])
-
     Ujoint = universal_joint(alpha, beta)
     var_ratio = rack_variable_ratio(rack_ratio, Delta_ratio, delta_trans)
     m = mn/np.cos(helix_angle*np.pi/180)
@@ -664,7 +684,7 @@ if __name__ == '__main__':
     l_left = var_ratio.disp(delta_pinion_overtravel) + tip_radius
     rack_thickness = tip_radius - axis_distance + 1
 
-    slice_to_check = np.ceil(height_discretizations/2)
+    slice_to_check = int(np.floor(height_discretizations/2))  # 5
 
 # endregion
 
@@ -688,14 +708,15 @@ if __name__ == '__main__':
         fig = plt.figure()
         ax_fun = fig.add_subplot()
 
-        delta_wheel_ratio = [1/d for d in deriv(delta_wheel, rack_disp)]
-        delta_pinion_ratio = [1/d for d in deriv(delta_pinion, rack_disp)]
-        ax_fun.plot(rack_disp, delta_wheel_ratio)
-        ax_fun.plot(rack_disp, delta_pinion_ratio)
+        delta_wheel_ratio = [d for d in deriv(rack_disp, delta_wheel)]
+        delta_pinion_ratio = [d for d in deriv(rack_disp, delta_pinion)]
+        ax_fun.plot(delta_wheel, delta_wheel_ratio, label='steering-rack')
+        ax_fun.plot(delta_wheel, delta_pinion_ratio, label='pinion-rack')
         ax_fun.set_title('Computed transmission ratio laws')
-        ax_fun.set_xlim(0, rack_stroke)
-        ax_fun.set_ylabel('transmission ratio [deg/mm]')
-        ax_fun.set_xlabel('rack displacement [mm]')
+        ax_fun.set_xlim(0, extreme_steering_wheel_angle)
+        ax_fun.set_ylabel('transmission ratio [mm/deg]')
+        ax_fun.set_xlabel('steering wheel position [deg]')
+        ax_fun.legend()
         ax_fun.grid(True)
         plt.savefig('Output/transmission_ratios.pdf',
                     dpi='figure', format='pdf')
@@ -709,13 +730,23 @@ if __name__ == '__main__':
     pinion = affinity.rotate(pinion, initial_rotation,
                              origin=(0, 0), use_radians=True)
 
+    # tips = 0
+    # radius = 0
+    # local_radius = [np.linalg.norm(pts) for pts in pinion_points]
+    # while tips != z:
+    #     radius += (tip_radius-radius)/2
+    #     tips = sum([loc_rad>radius for loc_rad in local_radius])
+
+    # tips_idx = np.where([loc_rad>radius for loc_rad in local_radius])
+
+    # tips_xy = [[pinion_points[idx][0],pinion_points[idx][1]] for idx in tips_idx]
+
     if show_plots:
         fig = plt.figure()
         pinion_ax = fig.add_subplot()
         pinion_ax.axis('equal')
         pinion_x, pinion_y = pinion.exterior.xy
-        #pinion_ax.add_patch(patches.Polygon(pinion.exterior.xy, alpha=.3, edgecolor="darkblue", facecolor="blue",))
-        plt.plot(pinion_x, pinion_y, '.')
+        plt.fill(pinion_x, pinion_y, alpha=0.5)
         plt.show()
 
     slices = []
@@ -734,6 +765,8 @@ if __name__ == '__main__':
     with Pool(num_proc) as pool:
         rack_polygon = list(
             tqdm.tqdm(pool.imap(rack_cut, cut_input), total=height_discretizations))
+        
+    
 
     if show_plots:
         fig = plt.figure()
@@ -742,6 +775,31 @@ if __name__ == '__main__':
         for k, slice in enumerate(rack_polygon):
             x, y = slice.exterior.xy
             ax_3D.plot(x, y, plane_height[k])
+
+        fig = plt.figure()
+        ax_centrodes = fig.add_subplot()
+        ax_centrodes.set_title('Centrodes')
+        inverse_ratio = [1/tau for tau in delta_pinion_ratio]
+        cent_x = [1/tau*np.sin(delta_pinion[i]*np.pi/180)
+                  for i, tau in enumerate(delta_pinion_ratio)]
+        cent_y = [1/tau*np.cos(delta_pinion[i]*np.pi/180)
+                  for i, tau in enumerate(delta_pinion_ratio)]
+        rack_pol_x, rack_pol_y = rack_polygon[slice_to_check].exterior.xy
+        rack_pol_y = [y+axis_distance for y in rack_pol_y]
+        ax_centrodes.fill(rack_pol_x, rack_pol_y, alpha=0.5)
+        ax_centrodes.fill(pinion_x, pinion_y, alpha=0.5)
+        ax_centrodes.plot(rack_disp, inverse_ratio, label='rack centrode')
+        pinion_centrode = ax_centrodes.plot(
+            cent_x, cent_y, label='pinion centrode')
+        ax_centrodes.plot([-x for x in cent_x], cent_y, color='#ff7f0e')
+        ax_centrodes.legend()
+        ax_centrodes.axis('equal')
+        ax_centrodes.set_ylabel('y [mm]')
+        ax_centrodes.set_xlabel('x [mm]')
+        ax_centrodes.set_xlim(-10, 40)
+        ax_centrodes.set_ylim(-10, 15)
+        plt.savefig('Output/centrodes.pdf',
+                    dpi='figure', format='pdf')
         plt.show()
 
     for j, height in enumerate(plane_height):
