@@ -447,30 +447,32 @@ def rack_cut(input):
 
     rack, pinion, section_rotation, delta_pinion, rack_disp, axis_distance = input
 
+    # To create the picture set heigth discretization to 1, deg step to 1.5
     # fig = plt.figure()
     # ax_boolean = fig.add_subplot()
     # ax_boolean.axis('equal')
     # ax_boolean.set_ylabel('y [mm]')
     # ax_boolean.set_xlabel('x [mm]')
+    # ax_boolean.set_xlim(-15, 20)
     # ax_boolean.set_title('Boolan subtraction')
-    # print_index = round(len(delta_pinion)/3)-5
+    # print_index = round(len(delta_pinion)/3)-9
 
     for i in range(len(delta_pinion)):
-        theta = delta_pinion[i]*np.pi/180 - section_rotation
+        theta = delta_pinion[i]*np.pi/180 + section_rotation
         affinity_matrix = [np.cos(
             theta), -np.sin(theta), np.sin(theta), np.cos(theta), rack_disp[i], -axis_distance]
         rack = rack.difference(
             affinity.affine_transform(pinion, affinity_matrix))
 
-        # only to generate picture for thesis
+    #only to generate picture for thesis
     #     if i>print_index-15 and i<=print_index:
 
     #         if i == print_index:
     #             rackbool_x, rackbool_y = rack.exterior.xy
-    #             ax_boolean.fill(rackbool_x, rackbool_y,facecolor='#1f77b4', alpha=0.5, label='Rack')
+    #             ax_boolean.fill(rackbool_x, rackbool_y,facecolor='#ff7f0e', edgecolor='#ff7f0e', linewidth=1.5, alpha=0.5, label='Rack')
     #         if i%3==0:
     #             pinionbool_x, pinionbool_y = affinity.affine_transform(pinion, affinity_matrix).exterior.xy
-    #             ax_boolean.fill(pinionbool_x, pinionbool_y,facecolor='#ff7f0e',  alpha=0.2)
+    #             ax_boolean.fill(pinionbool_x, pinionbool_y,facecolor='#1f77b4', edgecolor='#1f77b4', linewidth=1.5,  alpha=0.2)
 
     # ax_boolean.set_xlim(-15, 20)
     # plt.savefig('Output/boolean_subtraction.pdf',
@@ -623,23 +625,27 @@ if __name__ == '__main__':
     config.read(cfg_file)
 
     # see configuration file for contants description
-    mn = float(config['config']['mn'])
-    rp = float(config['config']['rp'])
-    helix_angle = float(config['config']['helix_angle'])
-    rack_height = float(config['config']['rack_height'])
-    alpha = float(config['config']['alpha'])
-    beta = float(config['config']['beta'])
-    c = float(config['config']['c'])
-    rack_stroke = float(config['config']['rack_stroke'])
-    rack_ratio = float(config['config']['rack_ratio'])
-    Delta_ratio = float(config['config']['Delta_ratio'])
-    delta_trans = float(config['config']['delta_trans'])
-    deg_step = float(config['config']['deg_step'])
-    height_discretizations = int(config['config']['height_discretizations'])
-    max_err = float(config['config']['max_err'])
-    output_filename = config['config']['output_filename']
-    pinion_filename = config['config']['pinion_filename']
-    show_plots = config['config']['show_plots'].lower() in (
+    mn = float(config['GearsGeometry']['mn'])
+    rp = float(config['GearsGeometry']['rp'])
+    helix_angle = float(config['GearsGeometry']['helix_angle'])
+    c = float(config['GearsGeometry']['c'])
+    rack_height = float(config['GearsGeometry']['rack_height'])
+    rack_stroke = float(config['GearsGeometry']['rack_stroke'])
+    
+    alpha = float(config['Cardan']['alpha'])
+    beta = float(config['Cardan']['beta'])
+    
+    rack_ratio = float(config['VariableTansmission']['rack_ratio'])
+    Delta_ratio = float(config['VariableTansmission']['Delta_ratio'])
+    delta_trans = float(config['VariableTansmission']['delta_trans'])
+    
+    deg_step = float(config['MovementDiscretization']['deg_step'])
+    height_discretizations = int(config['MovementDiscretization']['height_discretizations'])
+    max_err = float(config['MovementDiscretization']['max_err'])
+    
+    output_filename = config['I/O']['output_filename']
+    pinion_filename = config['I/O']['pinion_filename']
+    show_plots = config['I/O']['show_plots'].lower() in (
         'true', 't', 't.', 'vero', 'v', 'v.', 'yes', 'y', 'y.', 'si', 's', '1')
 
 # endregion
@@ -661,13 +667,15 @@ if __name__ == '__main__':
 
     date_str = datetime.now().strftime("%y%m%d_%H%M_")
 
+    Ujoint = universal_joint(alpha, beta)
+    var_ratio = rack_variable_ratio(rack_ratio, Delta_ratio, delta_trans)
+    
     find_tip_radius = [np.linalg.norm(pts) for pts in pinion_points]
     tip_radius = max(find_tip_radius)
     tip_index = find_tip_radius.index(tip_radius)
     initial_rotation = np.pi/2 - \
         np.arctan2(pinion_points[tip_index][1], pinion_points[tip_index][0])
-    Ujoint = universal_joint(alpha, beta)
-    var_ratio = rack_variable_ratio(rack_ratio, Delta_ratio, delta_trans)
+        
     m = mn/np.cos(helix_angle*np.pi/180)
     extreme_steering_wheel_angle = var_ratio.steer(rack_stroke)
     z = round(2*rp/m)
@@ -679,9 +687,10 @@ if __name__ == '__main__':
     delta_pinion_tip_exit = np.arccos(axis_distance/tip_radius)*180/np.pi
     delta_pinion_tooth_completion = rack_height / \
         2/rp*np.tan(helix_angle*np.pi/180)*180/np.pi
-    delta_pinion_overtravel = delta_pinion_tip_exit + delta_pinion_tooth_completion
-    l_right = var_ratio.disp(ext_angle + delta_pinion_overtravel) + tip_radius
-    l_left = var_ratio.disp(delta_pinion_overtravel) + tip_radius
+    overtravel_angle = delta_pinion_tip_exit + delta_pinion_tooth_completion
+    
+    l_right = var_ratio.disp(Ujoint.delta1(ext_angle + overtravel_angle)) + tip_radius
+    l_left = var_ratio.disp(Ujoint.delta1(overtravel_angle)) + tip_radius
     rack_thickness = tip_radius - axis_distance + 1
 
     slice_to_check = int(np.floor(height_discretizations/2))  # 5
@@ -690,8 +699,8 @@ if __name__ == '__main__':
 
 # region ########### Arrays definition
 
-    delta_pinion = np.arange(-delta_pinion_overtravel,
-                             ext_angle+delta_pinion_overtravel,
+    delta_pinion = np.arange(-overtravel_angle,
+                             ext_angle+overtravel_angle,
                              deg_step)
 
     N = len(delta_pinion)
@@ -746,7 +755,13 @@ if __name__ == '__main__':
         pinion_ax = fig.add_subplot()
         pinion_ax.axis('equal')
         pinion_x, pinion_y = pinion.exterior.xy
-        plt.fill(pinion_x, pinion_y, alpha=0.5)
+        plt.fill(pinion_x, pinion_y, facecolor='#1f77b4', edgecolor='#1f77b4', linewidth=1.5, alpha=0.5)
+        pinion_ax.set_title('Pinion cutter geometry')
+        pinion_ax.set_ylabel('y [mm]')
+        pinion_ax.set_xlabel('x [mm]')
+        plt.savefig('Output/PinionCutterGeometry.pdf',
+                    dpi='figure', format='pdf')
+
         plt.show()
 
     slices = []
@@ -756,7 +771,7 @@ if __name__ == '__main__':
 
     cut_input = []
     for height in plane_height:
-        section_rotation = height/rp*np.sin(helix_angle)
+        section_rotation = height/rp*np.sin(helix_angle*np.pi/180)
         cut_input.append([rack_blank, pinion, section_rotation,
                          delta_pinion, rack_disp, axis_distance])
 
@@ -766,15 +781,24 @@ if __name__ == '__main__':
         rack_polygon = list(
             tqdm.tqdm(pool.imap(rack_cut, cut_input), total=height_discretizations))
         
-    
-
     if show_plots:
         fig = plt.figure()
         ax_3D = fig.add_subplot(projection='3d')
-        ax_3D.axis('equal')
         for k, slice in enumerate(rack_polygon):
             x, y = slice.exterior.xy
-            ax_3D.plot(x, y, plane_height[k])
+            ax_3D.plot(x, y, plane_height[k],color='#1f77b4')
+        ax_3D.set_title('Rack polygons')
+        ax_3D.set_ylabel('y [mm]')
+        ax_3D.set_xlabel('x [mm]')
+        ax_3D.set_zlabel('z [mm]')
+        ax_3D.set_xlim(-5, 40)
+        ax_3D.set_ylim(-15, 15)
+        ax_3D.axis('equal')
+        
+        plt.tight_layout()
+        
+        plt.savefig('Output/RackPolygons.pdf',
+                    dpi='figure', format='pdf')
 
         fig = plt.figure()
         ax_centrodes = fig.add_subplot()
@@ -804,7 +828,7 @@ if __name__ == '__main__':
 
     for j, height in enumerate(plane_height):
 
-        pinion_helix_offset = height/rp*np.tan(helix_angle)*180/np.pi
+        pinion_helix_offset = height/rp*np.tan(helix_angle*np.pi/180)*180/np.pi
         first_midpoint_x = var_ratio.disp(Ujoint.delta1(-pinion_helix_offset))
         last_midpoint_x = var_ratio.disp(Ujoint.delta1(
             ext_angle+angle_bw_teeth-pinion_helix_offset))
