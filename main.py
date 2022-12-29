@@ -771,7 +771,7 @@ if __name__ == '__main__':
 
     cut_input = []
     for height in plane_height:
-        section_rotation = height/rp*np.sin(helix_angle*np.pi/180)
+        section_rotation = height/rp*np.tan(helix_angle*np.pi/180)
         cut_input.append([rack_blank, pinion, section_rotation,
                          delta_pinion, rack_disp, axis_distance])
 
@@ -928,6 +928,13 @@ if __name__ == '__main__':
                 final_spline_y = final_spline(final_spline_x)
                 ax_3D.plot(final_spline_x, final_spline_y,
                            plane_height[i], 'b')
+                ax_3D.set_title('Raw Curves')
+                ax_3D.set_ylabel('y [mm]')
+                ax_3D.set_xlabel('x [mm]')
+                ax_3D.set_zlabel('z [mm]')
+                ax_3D.set_xlim(-5, 40)
+                ax_3D.set_ylim(-15, 15)
+                ax_3D.axis('equal')
 
                 if i == slice_to_check:
 
