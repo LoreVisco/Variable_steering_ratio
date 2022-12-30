@@ -641,7 +641,7 @@ if __name__ == '__main__':
     
     deg_step = float(config['MovementDiscretization']['deg_step'])
     height_discretizations = int(config['MovementDiscretization']['height_discretizations'])
-    max_err = float(config['MovementDiscretization']['max_err'])
+    allowed_err = float(config['MovementDiscretization']['allowed_err'])
     
     output_filename = config['I/O']['output_filename']
     pinion_filename = config['I/O']['pinion_filename']
@@ -896,7 +896,7 @@ if __name__ == '__main__':
         for slice in tqdm.tqdm(slices):
             input = []
             for curve in slice:
-                input.append([curve, max_err])
+                input.append([curve, allowed_err])
             knots_slice = pool.map(smoothing, input)
             knots_slices.append(knots_slice)
 
@@ -904,7 +904,7 @@ if __name__ == '__main__':
     # for slice in tqdm.tqdm(slices):
     #     knots_slice = []
     #     for curve in slice:
-    #         knots_slice.append(smoothing([curve,max_err]))
+    #         knots_slice.append(smoothing([curve,allowed_err]))
     #     knots_slices.append(knots_slice)
 
 # endregion
